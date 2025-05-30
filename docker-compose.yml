@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: zivo_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - app
+    networks:
+      - zivo_network
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: zivo_app
+    volumes:
+      - ./:/var/www/html
+    networks:
+      - zivo_network
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: zivo_worker
+    volumes:
+      - ./:/var/www/html
+    depends_on:
+      - app
+    command: php artisan queue:work
+    networks:
+      - zivo_network
+
+networks:
+  zivo_network:
+    driver: bridge
+
+volumes:
+  dbdata: 
