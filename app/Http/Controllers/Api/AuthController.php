@@ -7,6 +7,7 @@ use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Events\Registered;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
@@ -37,7 +39,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Registration successful. Please check your email for verification.',
             'data' => [
-                'user' => $user,
+                'user' => new UserResource($user),
                 'token' => $token
             ]
         ], 201);
@@ -46,9 +48,9 @@ class AuthController extends Controller
     public function login(LoginRequest $request)
     {
         if (!Auth::attempt($request->only('email', 'password'))) {
-            throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
-            ]);
+           return response()->json([
+                'message' => 'Invalid credentials'
+            ], 401);
         }
 
         $user = User::where('email', $request->email)->firstOrFail();
@@ -57,7 +59,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Login successful',
             'data' => [
-                'user' => $user,
+                'user' => new UserResource($user),
                 'token' => $token
             ]
         ]);
@@ -114,18 +116,31 @@ class AuthController extends Controller
 
     public function forgotPassword(ForgotPasswordRequest $request)
     {
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
+        $user = User::where('email', $request->email)->first();
 
-        if ($status === Password::RESET_LINK_SENT) {
+        if (!$user) {
             return response()->json([
-                'message' => 'Password reset link sent to your email'
+                'message' => 'If your email is registered, you will receive a password reset token.'
             ]);
         }
 
-        throw ValidationException::withMessages([
-            'email' => [trans($status)],
+        // Generate a secure random token
+        $token = Str::random(64);
+
+        // Store the token in the password_reset_tokens table
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            [
+                'token' => $token,
+                'created_at' => now()
+            ]
+        );
+
+        // Send the password reset notification
+        $user->sendPasswordResetNotification($token);
+
+        return response()->json([
+            'message' => 'If your email is registered, you will receive a password reset token.'
         ]);
     }
 
@@ -154,4 +169,4 @@ class AuthController extends Controller
             'email' => [trans($status)],
         ]);
     }
-} 
+}

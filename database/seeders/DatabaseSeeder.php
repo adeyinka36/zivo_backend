@@ -2,10 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Media;
 use App\Models\Tag;
-use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -16,29 +13,19 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Create the predefined tags
-        $tags = ['advert', 'memory', 'maths'];
-        $createdTags = collect();
+        $tags = ['advert', 'memory', 'maths', 'video', 'image', 'document'];
         foreach ($tags as $tagName) {
-            $createdTags->push(Tag::create([
+            Tag::create([
                 'name' => $tagName,
                 'slug' => \Illuminate\Support\Str::slug($tagName)
-            ]));
+            ]);
         }
 
-        // Create a test user
-        $user = User::factory()->create([
-            'email' => 'test@example.com',
-            'password' => bcrypt('password')
+        // Run the seeders in order
+        $this->call([
+            UserSeeder::class,
+            MediaSeeder::class,
+            QuestionSeeder::class,
         ]);
-
-        // Create some media items with tags
-        Media::factory(20)->create([
-            'user_id' => $user->id
-        ])->each(function ($media) use ($createdTags) {
-            // Attach 1-3 random tags to each media item
-            $media->tags()->attach(
-                $createdTags->random(rand(1, 3))->pluck('id')->toArray()
-            );
-        });
     }
 }

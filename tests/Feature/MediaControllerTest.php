@@ -19,22 +19,25 @@ class MediaControllerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('s3');
+        Storage::fake('public');
+        
+        // Ensure storage directory exists
+        if (!file_exists(storage_path('app/public/media'))) {
+            mkdir(storage_path('app/public/media'), 0755, true);
+        }
     }
 
-    public function test_user_can_upload_media(): void
+    public function test_user_can_upload_video(): void
     {
         $user = User::factory()->create();
-        $file = UploadedFile::fake()->create('test.txt', 100, 'text/plain');
+        $file = UploadedFile::fake()->create('test.mp4', 1000, 'video/mp4');
         $tag = Tag::factory()->create(['name' => 'test-tag']);
 
         $response = $this->actingAs($user)
             ->postJson('/api/v1/media', [
                 'file' => $file,
-                'metadata' => [
-                    'description' => 'Test description',
-                    'tags' => [$tag->name]
-                ]
+                'description' => 'Test video description',
+                'tags' => [$tag->name]
             ]);
 
         $response->assertStatus(201)
@@ -44,8 +47,9 @@ class MediaControllerTest extends TestCase
                     'name',
                     'file_name',
                     'mime_type',
+                    'media_type',
                     'url',
-                    'metadata',
+                    'description',
                     'tags' => [
                         '*' => [
                             'id',
@@ -56,16 +60,134 @@ class MediaControllerTest extends TestCase
                         ]
                     ],
                     'created_at',
-                    'updated_at'
+                    'updated_at',
+                    'has_watched'
+                ]
+            ])
+            ->assertJson([
+                'data' => [
+                    'mime_type' => 'video/mp4',
+                    'media_type' => 'video',
+                    'description' => 'Test video description'
                 ]
             ]);
 
         $this->assertDatabaseHas('media', [
-            'name' => 'test.txt',
-            'mime_type' => 'text/plain'
+            'name' => 'test.mp4',
+            'mime_type' => 'video/mp4',
+            'user_id' => $user->id,
+            'description' => 'Test video description'
         ]);
 
-        Storage::disk('s3')->assertExists('zivo_media/' . $file->hashName());
+        Storage::disk('public')->assertExists('media/' . $file->hashName());
+    }
+
+    public function test_user_can_upload_image(): void
+    {
+        $user = User::factory()->create();
+        $file = UploadedFile::fake()->image('test.jpg', 800, 600);
+        $tag = Tag::factory()->create(['name' => 'test-tag']);
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/v1/media', [
+                'file' => $file,
+                'description' => 'Test image description',
+                'tags' => [$tag->name]
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonStructure([
+                'data' => [
+                    'id',
+                    'name',
+                    'file_name',
+                    'mime_type',
+                    'media_type',
+                    'url',
+                    'description',
+                    'tags' => [
+                        '*' => [
+                            'id',
+                            'name',
+                            'slug',
+                            'created_at',
+                            'updated_at'
+                        ]
+                    ],
+                    'created_at',
+                    'updated_at',
+                    'has_watched'
+                ]
+            ])
+            ->assertJson([
+                'data' => [
+                    'mime_type' => 'image/jpeg',
+                    'media_type' => 'image',
+                    'description' => 'Test image description'
+                ]
+            ]);
+
+        $this->assertDatabaseHas('media', [
+            'name' => 'test.jpg',
+            'mime_type' => 'image/jpeg',
+            'description' => 'Test image description'
+        ]);
+
+        Storage::disk('public')->assertExists('media/' . $file->hashName());
+    }
+
+    public function test_user_can_upload_document(): void
+    {
+        $user = User::factory()->create();
+        $file = UploadedFile::fake()->create('test.pdf', 100, 'application/pdf');
+        $tag = Tag::factory()->create(['name' => 'test-tag']);
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/v1/media', [
+                'file' => $file,
+                'description' => 'Test document description',
+                'tags' => [$tag->name]
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonStructure([
+                'data' => [
+                    'id',
+                    'name',
+                    'file_name',
+                    'mime_type',
+                    'media_type',
+                    'url',
+                    'description',
+                    'tags' => [
+                        '*' => [
+                            'id',
+                            'name',
+                            'slug',
+                            'created_at',
+                            'updated_at'
+                        ]
+                    ],
+                    'created_at',
+                    'updated_at',
+                    'has_watched'
+                ]
+            ])
+            ->assertJson([
+                'data' => [
+                    'mime_type' => 'application/pdf',
+                    'media_type' => 'document',
+                    'description' => 'Test document description'
+                ]
+            ]);
+
+        $this->assertDatabaseHas('media', [
+            'name' => 'test.pdf',
+            'mime_type' => 'application/pdf',
+            'description' => 'Test document description'
+        ]);
+
+        Storage::disk('public')->assertExists('media/' . $file->hashName());
     }
 
     public function test_user_can_list_their_media(): void
@@ -92,8 +214,9 @@ class MediaControllerTest extends TestCase
                         'name',
                         'file_name',
                         'mime_type',
+                        'media_type',
                         'url',
-                        'metadata',
+                        'description',
                         'tags' => [
                             '*' => [
                                 'id',
@@ -150,8 +273,9 @@ class MediaControllerTest extends TestCase
                         'name',
                         'file_name',
                         'mime_type',
+                        'media_type',
                         'url',
-                        'metadata',
+                        'description',
                         'tags' => [
                             '*' => [
                                 'id',
@@ -160,9 +284,7 @@ class MediaControllerTest extends TestCase
                                 'created_at',
                                 'updated_at'
                             ]
-                        ],
-                        'created_at',
-                        'updated_at'
+                        ]
                     ]
                 ]
             ]);
@@ -188,8 +310,9 @@ class MediaControllerTest extends TestCase
                     'name',
                     'file_name',
                     'mime_type',
+                    'media_type',
                     'url',
-                    'metadata',
+                    'description',
                     'tags' => [
                         '*' => [
                             'id',
@@ -198,9 +321,7 @@ class MediaControllerTest extends TestCase
                             'created_at',
                             'updated_at'
                         ]
-                    ],
-                    'created_at',
-                    'updated_at'
+                    ]
                 ]
             ]);
     }

@@ -17,15 +17,15 @@ class MediaResource extends JsonResource
             'name' => $this->name,
             'file_name' => $this->file_name,
             'mime_type' => $this->mime_type,
+            'media_type' => $this->getMediaType(),
+            'reward' => $this->reward,
             'url' => $this->getFileUrl(),
-            'metadata' => array_merge($this->metadata ?? [], [
-                'tags' => $this->whenLoaded('tags', function () {
-                    return $this->tags->pluck('name')->toArray();
-                }, $this->metadata['tags'] ?? [])
-            ]),
+            'description' => $this->description,
             'tags' => TagResource::collection($this->whenLoaded('tags')),
             'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at
+            'updated_at' => $this->updated_at,
+            'has_watched' => false,
+            'thumbnail' => $this->thumbnail,
         ];
     }
 
@@ -37,23 +37,29 @@ class MediaResource extends JsonResource
     }
 
     /**
-     * Get the public or temporary URL for the file.
+     * Get the media type based on mime type
      */
-    protected function getFileUrl(): ?string
+    protected function getMediaType(): string
     {
-        if ($this->disk === 's3' && $this->path) {
-            // If the bucket is public, this will be a public URL. If private, it's a temporary URL.
-            try {
-                // Try to get a temporary URL (valid for 1 hour)
-                return Storage::disk('s3')->temporaryUrl($this->path, now()->addHour());
-            } catch (\Exception $e) {
-                // Fallback to regular URL if temporaryUrl fails
-                return Storage::disk('s3')->url($this->path);
-            }
+        $mimeType = $this->mime_type;
+
+        if (str_starts_with($mimeType, 'video/')) {
+            return 'video';
         }
-        if ($this->disk === 'public' && $this->path) {
-            return Storage::disk('public')->url($this->path);
+
+        if (str_starts_with($mimeType, 'image/')) {
+            return 'image';
         }
-        return null;
+
+        if (str_starts_with($mimeType, 'application/pdf')) {
+            return 'document';
+        }
+
+        if (str_starts_with($mimeType, 'text/')) {
+            return 'text';
+        }
+
+        return 'other';
     }
-} 
+
+}

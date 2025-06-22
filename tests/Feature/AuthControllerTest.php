@@ -16,8 +16,8 @@ class AuthControllerTest extends TestCase
             'name' => 'Test User',
             'username' => 'testuser',
             'email' => 'test@example.com',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
         ];
 
         $response = $this->postJson('/api/v1/register', $userData);
@@ -47,12 +47,12 @@ class AuthControllerTest extends TestCase
     public function test_user_can_login(): void
     {
         $user = User::factory()->create([
-            'password' => bcrypt('Password123!'),
+            'password' => bcrypt('Password123'),
         ]);
 
         $response = $this->postJson('/api/v1/login', [
             'email' => $user->email,
-            'password' => 'Password123!',
+            'password' => 'Password123',
         ]);
 
         $response->assertStatus(200)

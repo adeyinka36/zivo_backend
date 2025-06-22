@@ -14,10 +14,13 @@ return new class extends Migration
             $table->string('name');
             $table->string('file_name');
             $table->string('mime_type');
+            $table->string('media_type')->nullable();
+            $table->bigInteger('reward');
             $table->unsignedBigInteger('size');
             $table->string('path');
             $table->string('disk');
-            $table->json('metadata')->nullable();
+            $table->text('description')->nullable();
+            
             $table->timestamps();
         });
     }

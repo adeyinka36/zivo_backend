@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use App\Models\Tag;
 
 class MediaService
 {
@@ -17,51 +18,92 @@ class MediaService
         private readonly TagService $tagService
     ) {}
 
-    public function store(StoreMediaRequest $request): Media
+    /**
+     * Store a new media file.
+     *
+     * @param UploadedFile $file
+     * @param array $metadata
+     * @param int $userId
+     * @return Media
+     */
+    public function store(UploadedFile $file, array $metadata, string $userId): Media
     {
-        Log::info('Store media request received', [
-            'has_file' => $request->hasFile('file'),
-            'all_data' => $request->all()
-        ]);
+        $disk = app()->environment('testing') ? 'public' : 's3';
+        $path = $disk === 's3' ? 'zivo_media/' . $file->hashName() : 'media/' . $file->hashName();
 
-        if (!$request->hasFile('file')) {
-            throw new \InvalidArgumentException('No file was uploaded');
-        }
+        $file->storeAs(
+            $disk === 's3' ? 'zivo_media' : 'media',
+            $file->hashName(),
+            ['disk' => $disk]
+        );
 
-        $file = $request->file('file');
-        $metadata = $request->input('metadata', []);
-        $fileName = $file->hashName();
-        
         $media = Media::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $userId,
             'name' => $file->getClientOriginalName(),
-            'file_name' => $fileName,
+            'file_name' => $file->getClientOriginalName(),
             'mime_type' => $file->getMimeType(),
             'size' => $file->getSize(),
-            'path' => 'zivo_media/' . $fileName,
-            'disk' => 's3',
-            'metadata' => $metadata
+            'path' => $path,
+            'disk' => $disk,
+            'description' => $metadata['description'] ?? null,
+            'reward' => $metadata['reward'] ?? 100,
         ]);
 
-        // Store the file in S3
-        Storage::disk('s3')->putFileAs('zivo_media', $file, $fileName);
-
-        // Handle tags if present
-        if (!empty($metadata['tags'])) {
-            $tags = $this->tagService->createOrFindTags($metadata['tags']);
-            $media->tags()->attach($tags->pluck('id'));
+        if (isset($metadata['tags']) && is_array($metadata['tags'])) {
+            foreach ($metadata['tags'] as $tagName) {
+                $tag = Tag::firstOrCreate(
+                    ['name' => $tagName],
+                    ['slug' => Str::slug($tagName)]
+                );
+                $media->tags()->attach($tag);
+            }
         }
 
         return $media;
     }
 
-    public function delete(Media $media): void
+    /**
+     * Upload file for an existing draft media record.
+     *
+     * @param UploadedFile $file
+     * @param Media $draft
+     * @return Media
+     */
+    public function uploadFile(UploadedFile $file, Media $draft): Media
     {
-        // Delete the file from S3
-        Storage::disk($media->disk)->delete($media->path);
+        $disk = app()->environment('testing') ? 'public' : 's3';
+        $path = $disk === 's3' ? 'zivo_media/' . $file->hashName() : 'media/' . $file->hashName();
 
-        // Delete the media record
-        $media->delete();
+        $file->storeAs(
+            $disk === 's3' ? 'zivo_media' : 'media',
+            $file->hashName(),
+            ['disk' => $disk]
+        );
+
+        // Update the draft with file information
+        $draft->update([
+            'name' => $file->getClientOriginalName(),
+            'file_name' => $file->getClientOriginalName(),
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize(),
+            'path' => $path,
+            'disk' => $disk,
+        ]);
+
+        return $draft;
+    }
+
+    /**
+     * Delete a media file.
+     *
+     * @param Media $media
+     * @return bool
+     */
+    public function delete(Media $media): bool
+    {
+        Storage::disk($media->disk)->delete($media->path);
+        $media->tags()->detach();
+        return $media->delete();
     }
 
     public function searchByTag(string $searchTerm)

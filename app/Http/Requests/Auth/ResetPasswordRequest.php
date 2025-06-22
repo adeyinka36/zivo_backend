@@ -21,9 +21,9 @@ class ResetPasswordRequest extends FormRequest
                 'required',
                 'confirmed',
                 Password::min(8)
+                    ->letters()
                     ->mixedCase()
                     ->numbers()
-                    ->symbols()
             ],
         ];
     }
@@ -41,7 +41,6 @@ class ResetPasswordRequest extends FormRequest
             'password.min' => 'Password must be at least 8 characters.',
             'password.mixed' => 'Password must contain at least one uppercase and one lowercase letter.',
             'password.numbers' => 'Password must contain at least one number.',
-            'password.symbols' => 'Password must contain at least one special character.',
         ];
     }
 } 
