@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\PaymentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -22,8 +23,9 @@ Route::prefix('v1')->group(function () {
     // Public routes
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('/password-email', [AuthController::class, 'forgotPassword'])
+        ->name('password.email');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.reset');
 
     // Email verification
     Route::get('/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail'])
@@ -41,8 +43,16 @@ Route::prefix('v1')->group(function () {
         // Media routes
         Route::get('media', [MediaController::class, 'index']);
         Route::post('media', [MediaController::class, 'store']);
+        Route::post('media/draft', [MediaController::class, 'storeDraft']);
+        Route::post('media/{draftId}/upload', [MediaController::class, 'uploadAfterPayment']);
         Route::get('media/{id}', [MediaController::class, 'show']);
         Route::delete('media/{id}', [MediaController::class, 'destroy']);
+
+        // Payment routes
+        Route::post('media/{media}/payment-intent', [PaymentController::class, 'createPaymentIntent']);
+        Route::get('payments/{paymentId}/status', [PaymentController::class, 'getPaymentStatus']);
+        Route::get('payments/history', [PaymentController::class, 'getPaymentHistory']);
+        Route::post('payments/{payment}/refund', [PaymentController::class, 'requestRefund']);
     });
 
     // Health check
@@ -53,4 +63,7 @@ Route::prefix('v1')->group(function () {
             'timestamp' => now()
         ]);
     });
+
+    // Webhook route (no auth required)
+    Route::post('webhooks/stripe', [PaymentController::class, 'webhook']);
 });

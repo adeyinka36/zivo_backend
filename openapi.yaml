@@ -36,10 +36,12 @@ components:
           type: string
           format: email
           example: "john@example.com"
+        zivos:
+          type: integer
+          example: 42
         email_verified_at:
           type: string
           format: date-time
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -53,31 +55,30 @@ components:
         id:
           type: string
           format: uuid
-          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
         name:
           type: string
-          example: "profile.jpg"
         file_name:
           type: string
-          example: "550e8400-e29b-41d4-a716-446655440000.jpg"
         mime_type:
           type: string
-          example: "image/jpeg"
+          enum: ["image/jpeg", "video/mp4", "application/pdf"]
+        media_type:
+          type: string
+          enum: ["image", "video", "document"]
         size:
           type: integer
-          example: 1024
+          format: int64
         path:
           type: string
-          example: "media/550e8400-e29b-41d4-a716-446655440000.jpg"
         disk:
           type: string
-          example: "local"
+        url:
+          type: string
         metadata:
           type: object
-          nullable: true
-          example:
-            description: "Profile picture"
-            tags: ["profile", "avatar"]
         tags:
           type: array
           items:
@@ -88,6 +89,13 @@ components:
         updated_at:
           type: string
           format: date-time
+        has_watched:
+          type: boolean
+        thumbnail:
+          type: string
+          nullable: true
+        reward:
+          type: integer
 
     Error:
       type: object
@@ -101,8 +109,6 @@ components:
             type: array
             items:
               type: string
-          example:
-            email: ["The email has already been taken."]
 
     Success:
       type: object
@@ -118,8 +124,8 @@ components:
       type: object
       properties:
         id:
-          type: string
-          format: uuid
+          type: integer
+          format: int64
         name:
           type: string
         slug:
@@ -130,6 +136,64 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    MediaResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Media'
+        success:
+          type: boolean
+
+    MediaListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Media'
+        meta:
+          type: object
+          properties:
+            current_page:
+              type: integer
+            from:
+              type: integer
+            last_page:
+              type: integer
+            path:
+              type: string
+            per_page:
+              type: integer
+            to:
+              type: integer
+            total:
+              type: integer
+        links:
+          type: object
+          properties:
+            first:
+              type: string
+            last:
+              type: string
+            prev:
+              type: string
+            next:
+              type: string
+        success:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
 
 paths:
   /register:
@@ -164,12 +228,12 @@ paths:
                   type: string
                   format: password
                   minLength: 8
-                  pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[@$!%*?&])[A-Za-z0-9@$!%*?&]{8,}$"
-                  example: "Password123!"
+                  pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])[A-Za-z0-9]{8,}$"
+                  example: "Password123"
                 password_confirmation:
                   type: string
                   format: password
-                  example: "Password123!"
+                  example: "Password123"
       responses:
         '201':
           description: User registered successfully
@@ -215,7 +279,7 @@ paths:
                 password:
                   type: string
                   format: password
-                  example: "password123"
+                  example: "Password123"
       responses:
         '200':
           description: Login successful
@@ -262,7 +326,7 @@ paths:
     post:
       tags:
         - Authentication
-      summary: Request password reset
+      summary: Request password reset token
       requestBody:
         required: true
         content:
@@ -278,7 +342,7 @@ paths:
                   example: "john@example.com"
       responses:
         '200':
-          description: Reset link sent
+          description: Reset token sent if email exists
           content:
             application/json:
               schema:
@@ -286,7 +350,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: "Password reset link sent to your email"
+                    example: "If your email is registered, you will receive a password reset token."
         '422':
           description: Validation error
           content:
@@ -298,7 +362,7 @@ paths:
     post:
       tags:
         - Authentication
-      summary: Reset password
+      summary: Reset password using token
       requestBody:
         required: true
         content:
@@ -313,7 +377,7 @@ paths:
               properties:
                 token:
                   type: string
-                  example: "reset-token-123"
+                  example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2"
                 email:
                   type: string
                   format: email
@@ -321,11 +385,11 @@ paths:
                 password:
                   type: string
                   format: password
-                  example: "newpassword123"
+                  example: "Password123"
                 password_confirmation:
                   type: string
                   format: password
-                  example: "newpassword123"
+                  example: "Password123"
       responses:
         '200':
           description: Password reset successful
@@ -450,47 +514,12 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Media'
-                  meta:
-                    type: object
-                    properties:
-                      current_page:
-                        type: integer
-                      from:
-                        type: integer
-                      last_page:
-                        type: integer
-                      path:
-                        type: string
-                      per_page:
-                        type: integer
-                      to:
-                        type: integer
-                      total:
-                        type: integer
-                  links:
-                    type: object
-                    properties:
-                      first:
-                        type: string
-                      last:
-                        type: string
-                      prev:
-                        type: string
-                        nullable: true
-                      next:
-                        type: string
-                        nullable: true
+                $ref: '#/components/schemas/MediaListResponse'
 
     post:
       tags:
         - Media
-      summary: Upload new media
+      summary: Upload a new media file
       security:
         - BearerAuth: []
       requestBody:
@@ -499,8 +528,6 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required:
-                - file
               properties:
                 file:
                   type: string
@@ -510,6 +537,7 @@ paths:
                   properties:
                     description:
                       type: string
+                      nullable: true
                     tags:
                       type: array
                       items:
@@ -520,16 +548,19 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Media'
+                $ref: '#/components/schemas/MediaResponse'
         '422':
           description: Validation error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /media/{id}:
     parameters:
@@ -537,45 +568,44 @@ paths:
         in: path
         required: true
         schema:
-          type: string
-          format: uuid
+          type: integer
+          format: int64
     get:
       tags:
         - Media
-      summary: Get media by ID
+      summary: Get a media file
       security:
         - BearerAuth: []
       responses:
         '200':
-          description: Media details
+          description: Media file details
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Media'
+                $ref: '#/components/schemas/MediaResponse'
         '403':
           description: Forbidden
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Forbidden"
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Media not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
     delete:
       tags:
         - Media
-      summary: Delete media
+      summary: Delete a media file
       security:
         - BearerAuth: []
       responses:
@@ -588,23 +618,26 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: "Media deleted successfully"
+                  success:
+                    type: boolean
         '403':
           description: Forbidden
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Forbidden"
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Media not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /health:
     get:
