@@ -37,7 +37,7 @@ class StoreMediaRequest extends FormRequest
             'file' => [
                 'required',
                 'file',
-                'max:20440', // 20MB max
+                'max:10485760', // 10GB max (10 * 1024 * 1024 * 1024)
                 'mimes:jpeg,png,jpg,gif,mp4,pdf,doc,docx,xls,xlsx,ppt,pptx,txt'
             ],
             'description' => 'nullable|string|max:1000',
@@ -58,7 +58,7 @@ class StoreMediaRequest extends FormRequest
     {
         return [
             'file.required' => 'Please upload a file.',
-            'file.max' => 'The file size must not exceed 20MB.',
+            'file.max' => 'The file size must not exceed 10GB.',
             'file.mimes' => 'The file must be a valid media file (jpeg, png, jpg, gif, mp4, pdf, doc, docx, xls, xlsx, ppt, pptx, txt).',
             'description.max' => 'The description must not exceed 1000 characters.',
             'tags.*.max' => 'Each tag must not exceed 255 characters.',

@@ -15,6 +15,7 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->integer('zivos')->default(0);
             $table->timestamp('email_verified_at')->nullable();
+            $table->string('push_token')->nullable();
             $table->string('password');
             $table->rememberToken();
             $table->timestamps();
@@ -25,4 +26,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('users');
     }
-}; 
+};

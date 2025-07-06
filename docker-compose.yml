@@ -13,6 +13,12 @@ services:
       - app
     networks:
       - zivo_network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
 
   app:
     build:
@@ -23,6 +29,16 @@ services:
       - ./:/var/www/html
     networks:
       - zivo_network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    environment:
+      - PHP_MEMORY_LIMIT=2G
+      - UPLOAD_MAX_FILESIZE=10G
+      - POST_MAX_SIZE=10G
 
   worker:
     build:
@@ -36,6 +52,12 @@ services:
     command: php artisan queue:work
     networks:
       - zivo_network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
 
 networks:
   zivo_network:

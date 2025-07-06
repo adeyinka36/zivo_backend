@@ -57,6 +57,11 @@ class Media extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function watchedByUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'media_users_watched', 'media_id', 'user_id');
+    }
+
     public function getRouteKeyName()
     {
         return 'id';
@@ -99,4 +104,4 @@ class Media extends Model
 
         return null;
     }
-} 
+}

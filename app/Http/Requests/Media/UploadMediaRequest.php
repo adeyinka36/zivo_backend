@@ -17,7 +17,7 @@ class UploadMediaRequest extends FormRequest
             'file' => [
                 'required',
                 'file',
-                'max:10240', // 10MB max
+                'max:10485760', // 10GB max
                 'mimes:jpeg,png,jpg,gif,mp4,pdf,doc,docx,xls,xlsx,ppt,pptx,txt'
             ],
             'metadata' => 'nullable|array',
@@ -29,7 +29,7 @@ class UploadMediaRequest extends FormRequest
     {
         return [
             'file.required' => 'Please select a file to upload.',
-            'file.max' => 'The file size must not exceed 10MB.',
+            'file.max' => 'The file size must not exceed 10GB.',
             'file.mimes' => 'The file must be a valid image, video, document, or text file.',
         ];
     }

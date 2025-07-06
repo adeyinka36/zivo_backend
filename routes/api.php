@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -43,16 +44,21 @@ Route::prefix('v1')->group(function () {
         // Media routes
         Route::get('media', [MediaController::class, 'index']);
         Route::post('media', [MediaController::class, 'store']);
-        Route::post('media/draft', [MediaController::class, 'storeDraft']);
-        Route::post('media/{draftId}/upload', [MediaController::class, 'uploadAfterPayment']);
+//        Route::post('media/draft', [MediaController::class, 'storeDraft']);
+//        Route::post('media/{draftId}/upload', [MediaController::class, 'uploadAfterPayment']);
         Route::get('media/{id}', [MediaController::class, 'show']);
         Route::delete('media/{id}', [MediaController::class, 'destroy']);
+        Route::post('media-watched/{media}/{user}', [MediaController::class, 'markAsWatched']);
 
         // Payment routes
         Route::post('media/{media}/payment-intent', [PaymentController::class, 'createPaymentIntent']);
         Route::get('payments/{paymentId}/status', [PaymentController::class, 'getPaymentStatus']);
         Route::get('payments/history', [PaymentController::class, 'getPaymentHistory']);
         Route::post('payments/{payment}/refund', [PaymentController::class, 'requestRefund']);
+
+        Route::prefix('push-token')->group(function () {
+            Route::post('{user}', [NotificationController::class, 'store']);
+        });
     });
 
     // Health check

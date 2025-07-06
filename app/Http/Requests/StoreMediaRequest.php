@@ -14,7 +14,7 @@ class StoreMediaRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'file' => 'required|file|max:10240', // 10MB max
+            'file' => 'required|file|max:10485760', // 10GB max
             'metadata' => 'nullable|array',
             'metadata.description' => 'nullable|string|max:1000',
             'metadata.tags' => 'nullable|array|max:10', // Limit number of tags
@@ -26,7 +26,7 @@ class StoreMediaRequest extends FormRequest
     {
         return [
             'file.required' => 'Please select a file to upload.',
-            'file.max' => 'The file size must not exceed 10MB.',
+            'file.max' => 'The file size must not exceed 10GB.',
             'metadata.tags.max' => 'You can add at most 10 tags.',
             'metadata.tags.*.max' => 'Each tag must not exceed 50 characters.',
             'metadata.tags.*.regex' => 'Tags can only contain letters, numbers, spaces, and hyphens.',

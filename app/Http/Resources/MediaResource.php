@@ -12,6 +12,13 @@ class MediaResource extends JsonResource
     public function toArray(Request $request): array
     {
         /** @var Media $this */
+        $user = $request->user();
+        $hasWatched = false;
+        
+        if ($user) {
+            $hasWatched = $this->watchedByUsers()->where('user_id', $user->id)->exists();
+        }
+        
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -24,7 +31,7 @@ class MediaResource extends JsonResource
             'tags' => TagResource::collection($this->whenLoaded('tags')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'has_watched' => false,
+            'has_watched' => $hasWatched,
             'thumbnail' => $this->thumbnail,
         ];
     }
