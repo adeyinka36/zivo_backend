@@ -10,6 +10,7 @@ use App\Models\Media;
 use App\Models\MediaUserWatched;
 use App\Models\Tag;
 use App\Models\User;
+use App\Models\Payment;
 use App\Services\MediaService;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
@@ -37,77 +38,42 @@ class MediaController extends Controller
         return MediaResource::collection($media);
     }
 
-//    //Todo: confirm that the method below can be removed
-//    public function storeDraft(Request $request)
-//    {
-//        $request->validate([
-//            'description' => 'nullable|string|max:1000',
-//            'tags' => 'nullable|array',
-//            'tags.*' => 'string|max:255',
-//            'reward' => 'required|integer|min:100',
-//            'questions' => 'nullable|array',
-//            'questions.*.question' => 'required|string|max:500',
-//            'questions.*.answer' => 'required|string|in:A,B,C,D',
-//            'questions.*.option_a' => 'required|string|max:255',
-//            'questions.*.option_b' => 'required|string|max:255',
-//            'questions.*.option_c' => 'required|string|max:255',
-//            'questions.*.option_d' => 'required|string|max:255',
-//        ]);
-//
-//        return DB::transaction(function () use ($request) {
-//            // Create draft media record without file
-//            $media = Media::create([
-//                'user_id' => $request->user()->id,
-//                'name' => 'Draft Media',
-//                'file_name' => null,
-//                'mime_type' => null,
-//                'size' => null,
-//                'path' => null,
-//                'disk' => null,
-//                'description' => $request->input('description'),
-//                'reward' => $request->input('reward'),
-//                'payment_status' => 'pending',
-//            ]);
-//
-//            // Attach tags
-//            if ($request->has('tags')) {
-//                $media->tags()->attach($request->input('tags'));
-//            }
-//
-//            // Create questions
-//            if ($request->has('questions')) {
-//                foreach ($request->input('questions') as $questionData) {
-//                    $media->questions()->create($questionData);
-//                }
-//            }
-//
-//            // Create payment intent
-//            $paymentService = app(PaymentService::class);
-//            $paymentResult = $paymentService->createPaymentIntent($media, $request->user());
-//
-//            return response()->json([
-//                'draft' => new MediaResource($media->load('tags')),
-//                'payment_intent' => [
-//                    'client_secret' => $paymentResult['client_secret'],
-//                    'payment_id' => $paymentResult['payment_id'],
-//                ]
-//            ]);
-//        });
-//    }
-
-    public function store(StoreMediaRequest $request)
+    /**
+     * Create payment intent with metadata only (no file upload)
+     */
+    public function createPaymentIntent(Request $request)
     {
-        return DB::transaction(function () use ($request) {
-            $media = $this->mediaService->store(
-                $request->file('file'),
-                [
-                    'description' => $request->input('description'),
-                    'reward' => $request->input('reward', 100)
-                ],
-                $request->user()->id
-            );
+        $request->validate([
+            'description' => 'nullable|string|max:1000',
+            'tags' => 'nullable|array',
+            'tags.*' => 'string|max:255',
+            'reward' => 'required|integer|min:100|max:100000000000',
+            'questions' => 'nullable|array',
+            'questions.*.question' => 'required|string|max:1000',
+            'questions.*.answer' => 'required|string|in:A,B,C,D',
+            'questions.*.option_a' => 'required|string|max:255',
+            'questions.*.option_b' => 'required|string|max:255',
+            'questions.*.option_c' => 'required|string|max:255',
+            'questions.*.option_d' => 'required|string|max:255',
+        ]);
 
-            if($request->input('tags')) {
+        return DB::transaction(function () use ($request) {
+            // Create a temporary media record with metadata only
+            $media = Media::create([
+                'user_id' => $request->user()->id,
+                'name' => 'Pending Upload',
+                'file_name' => 'pending',
+                'mime_type' => 'pending',
+                'size' => 0,
+                'path' => 'pending',
+                'disk' => 'pending',
+                'description' => $request->input('description'),
+                'reward' => $request->input('reward'),
+                'payment_status' => 'pending',
+            ]);
+
+            // Attach tags if provided
+            if ($request->input('tags')) {
                 $tags = $request->input('tags', []);
                 $mediaTags = [];
                 foreach ($tags as $tagName) {
@@ -116,13 +82,14 @@ class MediaController extends Controller
                             'name' => $tagName,
                             'slug' => str($tagName)->slug()
                         ]);
-                    }else{
+                    } else {
                         $mediaTags[] = Tag::where('name', $tagName)->first();
                     }
                 }
                 $media->tags()->attach($mediaTags);
             }
 
+            // Create questions if provided
             if ($request->has('questions')) {
                 foreach ($request->input('questions') as $questionData) {
                     $media->questions()->create($questionData);
@@ -134,40 +101,114 @@ class MediaController extends Controller
             $paymentResult = $paymentService->createPaymentIntent($media, $request->user());
 
             return response()->json([
-                'media' => new MediaResource($media->load('tags')),
                 'payment_intent' => [
                     'client_secret' => $paymentResult['client_secret'],
                     'payment_id' => $paymentResult['payment_id'],
+                    'existing' => $paymentResult['existing'] ?? false,
                 ]
             ]);
         });
     }
 
-//    //Todo: confirm that the method below can be removed
-//    public function uploadAfterPayment(Request $request, $draftId)
-//    {
-//        $request->validate([
-//            'file' => 'required|file|mimes:jpeg,jpg,png,gif,mp4,mov,avi|max:10485760', // 10GB max
-//        ]);
-//
-//        $draft = Media::where('id', $draftId)
-//            ->where('user_id', $request->user()->id)
-//            ->where('payment_status', 'paid')
-//            ->firstOrFail();
-//
-//        return DB::transaction(function () use ($request, $draft) {
-//            // Upload the actual file
-//            $media = $this->mediaService->uploadFile(
-//                $request->file('file'),
-//                $draft
-//            );
-//
-//            return response()->json([
-//                'media' => new MediaResource($media->load('tags')),
-//                'message' => 'Media uploaded successfully'
-//            ]);
-//        });
-//    }
+    /**
+     * Upload media after successful payment
+     */
+    public function uploadAfterPayment(Request $request)
+    {
+        $request->validate([
+            'payment_id' => 'required|string|exists:payments,id',
+            'file' => 'required|file|max:10485760|mimes:jpeg,png,jpg,gif,mp4',
+            'description' => 'nullable|string|max:1000',
+            'tags' => 'nullable|array',
+            'tags.*' => 'string|max:255',
+            'reward' => 'required|integer|min:100|max:100000000000',
+            'questions' => 'nullable|array',
+            'questions.*.question' => 'required|string|max:1000',
+            'questions.*.answer' => 'required|string|in:A,B,C,D',
+            'questions.*.option_a' => 'required|string|max:255',
+            'questions.*.option_b' => 'required|string|max:255',
+            'questions.*.option_c' => 'required|string|max:255',
+            'questions.*.option_d' => 'required|string|max:255',
+        ]);
+
+        return DB::transaction(function () use ($request) {
+            // Find the payment and verify it's successful
+            $payment = Payment::where('id', $request->input('payment_id'))
+                ->where('status', Payment::STATUS_SUCCEEDED)
+                ->firstOrFail();
+
+            // Find the associated media
+            $media = $payment->media;
+            
+            if (!$media) {
+                return response()->json(['message' => 'Media not found'], 404);
+            }
+
+            // Verify ownership
+            if ($media->user_id !== $request->user()->id) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+
+            // Upload the actual file
+            $uploadedMedia = $this->mediaService->store(
+                $request->file('file'),
+                [
+                    'description' => $request->input('description'),
+                    'reward' => $request->input('reward'),
+                ],
+                $request->user()->id
+            );
+
+            // Update the existing media record with the uploaded file data
+            $media->update([
+                'name' => $uploadedMedia->name,
+                'file_name' => $uploadedMedia->file_name,
+                'mime_type' => $uploadedMedia->mime_type,
+                'size' => $uploadedMedia->size,
+                'path' => $uploadedMedia->path,
+                'disk' => $uploadedMedia->disk,
+                'description' => $request->input('description'),
+                'reward' => $request->input('reward'),
+                'payment_status' => 'paid',
+                'paid_at' => now(),
+                'amount_paid' => $request->input('reward'),
+            ]);
+
+            // Update tags
+            $media->tags()->detach();
+            if ($request->input('tags')) {
+                $tags = $request->input('tags', []);
+                $mediaTags = [];
+                foreach ($tags as $tagName) {
+                    if (!Tag::where('name', $tagName)->exists()) {
+                        $mediaTags[] = Tag::create([
+                            'name' => $tagName,
+                            'slug' => str($tagName)->slug()
+                        ]);
+                    } else {
+                        $mediaTags[] = Tag::where('name', $tagName)->first();
+                    }
+                }
+                $media->tags()->attach($mediaTags);
+            }
+
+            // Update questions
+            $media->questions()->delete();
+            if ($request->has('questions')) {
+                foreach ($request->input('questions') as $questionData) {
+                    $media->questions()->create($questionData);
+                }
+            }
+
+            // Delete the temporary uploaded media
+            $uploadedMedia->delete();
+
+            return response()->json([
+                'media' => new MediaResource($media->load('tags')),
+                'message' => 'Media uploaded successfully after payment'
+            ]);
+        });
+    }
 
     public function show(Request $request, $id)
     {

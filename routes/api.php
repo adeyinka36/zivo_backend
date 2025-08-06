@@ -44,6 +44,8 @@ Route::prefix('v1')->group(function () {
         // Media routes
         Route::get('media', [MediaController::class, 'index']);
         Route::post('media', [MediaController::class, 'store']);
+        Route::post('media/payment-intent', [MediaController::class, 'createPaymentIntent']);
+        Route::post('media/upload-after-payment', [MediaController::class, 'uploadAfterPayment']);
 //        Route::post('media/draft', [MediaController::class, 'storeDraft']);
 //        Route::post('media/{draftId}/upload', [MediaController::class, 'uploadAfterPayment']);
         Route::get('media/{id}', [MediaController::class, 'show']);
@@ -51,7 +53,6 @@ Route::prefix('v1')->group(function () {
         Route::post('media-watched/{media}/{user}', [MediaController::class, 'markAsWatched']);
 
         // Payment routes
-        Route::post('media/{media}/payment-intent', [PaymentController::class, 'createPaymentIntent']);
         Route::get('payments/{paymentId}/status', [PaymentController::class, 'getPaymentStatus']);
         Route::get('payments/history', [PaymentController::class, 'getPaymentHistory']);
         Route::post('payments/{payment}/refund', [PaymentController::class, 'requestRefund']);

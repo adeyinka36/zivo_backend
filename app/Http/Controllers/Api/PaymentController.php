@@ -9,6 +9,7 @@ use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
+use Stripe\StripeClient;
 
 class PaymentController extends Controller
 {
@@ -82,15 +83,9 @@ class PaymentController extends Controller
                 config('stripe.webhook_secret')
             );
 
-            Log::info('Webhook received', [
-                'event_type' => $event->type,
-                'payment_intent_id' => $event->data->object->id ?? null,
-            ]);
-
             switch ($event->type) {
                 case 'payment_intent.succeeded':
                     $payment = $this->paymentService->confirmPayment($event->data->object->id);
-                    Log::info('Payment confirmed', ['payment_id' => $payment->id]);
                     break;
 
                 case 'payment_intent.payment_failed':
@@ -98,7 +93,6 @@ class PaymentController extends Controller
                         $event->data->object->id,
                         $event->data->object->last_payment_error->message ?? 'Payment failed'
                     );
-                    Log::warning('Payment failed', ['payment_id' => $payment->id]);
                     break;
 
                 case 'payment_intent.canceled':
@@ -106,14 +100,10 @@ class PaymentController extends Controller
                         $event->data->object->id,
                         'Payment canceled'
                     );
-                    Log::info('Payment canceled', ['payment_id' => $payment->id]);
                     break;
 
                 case 'charge.refunded':
                     // Handle refund webhook if needed
-                    Log::info('Refund processed', [
-                        'charge_id' => $event->data->object->id,
-                    ]);
                     break;
 
                 default:
@@ -125,7 +115,6 @@ class PaymentController extends Controller
         } catch (\Exception $e) {
             Log::error('Webhook processing failed', [
                 'error' => $e->getMessage(),
-                'payload' => $payload,
             ]);
 
             return response()->json(['error' => 'Webhook processing failed'], 500);
@@ -145,14 +134,16 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Payment not found'], 404);
         }
 
-        return response()->json([
+        $response = [
             'payment_id' => $payment->id,
             'status' => $payment->status,
             'amount' => $payment->amount,
             'currency' => $payment->currency,
             'paid_at' => $payment->paid_at,
             'failure_reason' => $payment->failure_reason,
-        ]);
+        ];
+
+        return response()->json($response);
     }
 
     /**

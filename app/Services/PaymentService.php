@@ -106,7 +106,11 @@ class PaymentService
             }
 
             // Get updated payment intent from Stripe
-            $stripePaymentIntent = $this->stripe->paymentIntents->retrieve($paymentIntentId);
+            try {
+                $stripePaymentIntent = $this->stripe->paymentIntents->retrieve($paymentIntentId);
+            } catch (\Exception $e) {
+                throw new \Exception('Failed to retrieve payment intent from Stripe: ' . $e->getMessage());
+            }
             
             if ($stripePaymentIntent->status === 'succeeded') {
                 $payment->update([
@@ -243,6 +247,7 @@ class PaymentService
                 $signature,
                 config('stripe.webhook_secret')
             );
+            
             return true;
         } catch (\Exception $e) {
             $this->paymentLogger->logSecurityEvent('webhook_signature_validation_failed', [
