@@ -38,7 +38,7 @@ class StoreMediaRequest extends FormRequest
                 'required',
                 'file',
                 'max:10485760', // 10GB max (10 * 1024 * 1024 * 1024)
-                'mimes:jpeg,png,jpg,gif,mp4,pdf,doc,docx,xls,xlsx,ppt,pptx,txt'
+                'mimes:jpeg,png,jpg,gif,mp4'
             ],
             'description' => 'nullable|string|max:1000',
             'tags' => 'nullable|array',

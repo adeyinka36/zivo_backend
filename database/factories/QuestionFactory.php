@@ -21,22 +21,22 @@ class QuestionFactory extends Factory
     public function definition(): array
     {
         $options = [
-            'A' => $this->faker->sentence(),
-            'B' => $this->faker->sentence(),
-            'C' => $this->faker->sentence(),
-            'D' => $this->faker->sentence(),
+            'A' => $this->faker->text(50),
+            'B' => $this->faker->text(50),
+            'C' => $this->faker->text(50),
+            'D' => $this->faker->text(50),
         ];
 
         $correctAnswer = $this->faker->randomElement(['A', 'B', 'C', 'D']);
 
         return [
-            'question' => $this->faker->paragraph(),
+            'question' => $this->faker->text(100),
             'answer' => $correctAnswer,
             'option_a' => $options['A'],
             'option_b' => $options['B'],
             'option_c' => $options['C'],
             'option_d' => $options['D'],
-            'media_id' => Media::factory()
+            'media_id' => Media::factory(),
         ];
     }
 }

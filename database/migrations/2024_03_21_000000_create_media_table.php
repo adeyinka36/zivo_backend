@@ -20,7 +20,8 @@ return new class extends Migration
             $table->string('path');
             $table->string('disk');
             $table->text('description')->nullable();
-            
+            $table->boolean('has_reward')->default(true);
+
             $table->timestamps();
         });
     }
@@ -29,4 +30,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('media');
     }
-}; 
+};

@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Http\Resources\MediaResource;
+use App\Http\Resources\MediaWithQuestionResource;
 use App\Models\Media;
 use App\Models\User;
 use App\Services\SendNotification;
@@ -29,29 +29,28 @@ class QuizInvitation implements ShouldQueue
      */
     public function handle(): void
     {
-        Log::info("QuizInvitation job started for media ID====: {$this->media->id}");
         $reward = ($this->media->reward)/100;
         $peopleWhoWatched = $this->media->watchedByUsers();
         $userTokens  = $peopleWhoWatched->pluck('push_token')->toArray();
-//        if (empty($userTokens)) {
-//            Log::info("No player completed the watch for media ID: {$this->media->id}");
-//            return;
-//        }
-//        $selectedPlayers = array_rand($userTokens, 2);
+        if (empty($userTokens)) {
+            Log::info("No push token for player who watched media: {$this->media->id}");
+            return;
+        }
+        $selectedUsers = array_rand($userTokens, 2);
 
         //just for tests
-        $testUserTokens = User::whereIn('email', ['adeyinka.giwa36@gmail.com', 'kymakurumure@hotmail.com',])
-            ->whereNotNull('push_token')
-            ->pluck('push_token')
-            ->toArray();
+//        $testUserTokens = User::whereIn('email', ['adeyinka.giwa36@gmail.com', 'kymakurumure@hotmail.com',])
+//            ->whereNotNull('push_token')
+//            ->pluck('push_token')
+//            ->toArray();
 
         $title = 'Quiz Invitation';
         $body = "You have been invited to participate in a quiz worth \$$reward in AWS voucher.";
         $data = [
-            'media' => new MediaResource($this->media),
+            'media' => new MediaWithQuestionResource($this->media),
             'type' => 'quiz_invitation',
-            'targetScreen' => '/quiz/' . $this->media->id,
         ];
-          SendNotification::toExpoNotification($testUserTokens, $title, $body, $data);
+
+          SendNotification::toExpoNotification($selectedUsers, $title, $body, $data);
     }
 }
