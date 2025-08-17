@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\NotificationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -41,13 +42,15 @@ Route::prefix('v1')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail']);
 
+        // Profile routes
+        Route::get('/profile', [ProfileController::class, 'show']);
+        Route::put('/profile', [ProfileController::class, 'update']);
+        Route::get('/user/media', [ProfileController::class, 'getUserMedia']);
+
         // Media routes
         Route::get('media', [MediaController::class, 'index']);
-        Route::post('media', [MediaController::class, 'store']);
         Route::post('media/payment-intent', [MediaController::class, 'createPaymentIntent']);
         Route::post('media/upload-after-payment', [MediaController::class, 'uploadAfterPayment']);
-//        Route::post('media/draft', [MediaController::class, 'storeDraft']);
-//        Route::post('media/{draftId}/upload', [MediaController::class, 'uploadAfterPayment']);
         Route::get('media/{id}', [MediaController::class, 'show']);
         Route::delete('media/{id}', [MediaController::class, 'destroy']);
         Route::post('media-watched/{media}/{user}', [MediaController::class, 'markAsWatched']);

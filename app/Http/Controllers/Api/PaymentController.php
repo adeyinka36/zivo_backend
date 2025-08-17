@@ -3,64 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Media;
+use App\Http\Requests\Payment\GetPaymentHistoryRequest;
+use App\Http\Requests\Payment\RequestRefundRequest;
 use App\Models\Payment;
 use App\Services\PaymentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\RateLimiter;
-use Stripe\StripeClient;
 
 class PaymentController extends Controller
 {
     public function __construct(
         private readonly PaymentService $paymentService
     ) {}
-
-    /**
-     * Create payment intent for media upload
-     */
-    public function createPaymentIntent(Request $request, Media $media)
-    {
-        // Rate limiting
-        $key = 'payment_intent_' . $request->user()->id;
-        if (RateLimiter::tooManyAttempts($key, 10)) {
-            return response()->json([
-                'message' => 'Too many payment attempts. Please try again later.',
-            ], 429);
-        }
-        RateLimiter::hit($key, 60); // 1 minute window
-
-        // Validate media ownership
-        if ($media->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        // Check if already paid
-        if ($media->payment_status === 'paid') {
-            return response()->json(['message' => 'Media already paid for'], 400);
-        }
-
-        try {
-            $result = $this->paymentService->createPaymentIntent($media, $request->user());
-
-            return response()->json([
-                'client_secret' => $result['client_secret'],
-                'payment_id' => $result['payment_id'],
-                'existing' => $result['existing'] ?? false,
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Failed to create payment intent', [
-                'error' => $e->getMessage(),
-                'media_id' => $media->id,
-                'user_id' => $request->user()->id,
-            ]);
-
-            return response()->json([
-                'message' => 'Failed to create payment intent. Please try again.',
-            ], 500);
-        }
-    }
 
     /**
      * Handle Stripe webhooks
@@ -149,12 +103,29 @@ class PaymentController extends Controller
     /**
      * Get user's payment history
      */
-    public function getPaymentHistory(Request $request)
+    public function getPaymentHistory(GetPaymentHistoryRequest $request)
     {
-        $payments = Payment::where('user_id', $request->user()->id)
-            ->with(['media:id,name,file_name'])
-            ->orderBy('created_at', 'desc')
-            ->paginate(15);
+        $perPage = $request->input('per_page', 15);
+        $page = $request->input('page', 1);
+        
+        $query = Payment::where('user_id', $request->user()->id)
+            ->with(['media:id,name,file_name']);
+
+        // Apply status filter if provided
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Apply date range filter if provided
+        if ($request->filled('start_date')) {
+            $query->whereDate('created_at', '>=', $request->input('start_date'));
+        }
+
+        if ($request->filled('end_date')) {
+            $query->whereDate('created_at', '<=', $request->input('end_date'));
+        }
+
+        $payments = $query->orderBy('created_at', 'desc')->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json([
             'payments' => $payments->items(),
@@ -170,18 +141,12 @@ class PaymentController extends Controller
     /**
      * Request refund
      */
-    public function requestRefund(Request $request, Payment $payment)
+    public function requestRefund(RequestRefundRequest $request, Payment $payment)
     {
         // Validate payment ownership
         if ($payment->user_id !== $request->user()->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
-
-        // Validate refund request
-        $request->validate([
-            'reason' => 'required|string|max:500',
-            'amount' => 'nullable|numeric|min:0.01|max:' . $payment->amount,
-        ]);
 
         try {
             $refundResult = $this->paymentService->processRefund(

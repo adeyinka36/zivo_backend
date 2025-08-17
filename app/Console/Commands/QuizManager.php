@@ -26,10 +26,8 @@ class QuizManager extends Command
      */
     public function handle()
     {
-        $allMediaThatHaveQuizzesAndHaveBeenWatched = Media::where('reward_won', true)
+        $allMediaThatHaveQuizzesAndHaveBeenWatched = Media::where('created_at', '<', now()->subHours(6))
             ->whereHas('watchedByUsers')
-            ->whereBetween('created_at', [now()->subDays(7), now()->subDays(3)]) // Between 7 and 3 days ago
-            ->where('has_reward', true)
             ->get();
 
         if ($allMediaThatHaveQuizzesAndHaveBeenWatched->isEmpty()) {
@@ -46,5 +44,4 @@ class QuizManager extends Command
             }
         }
     }
-
 }

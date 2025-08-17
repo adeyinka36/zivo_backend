@@ -4,7 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\ListMediaRequest;
-use App\Http\Requests\Media\StoreMediaRequest;
+use App\Http\Requests\Media\CreatePaymentIntentRequest;
+use App\Http\Requests\Media\UploadAfterPaymentRequest;
+use App\Http\Requests\Media\ShowMediaRequest;
+use App\Http\Requests\Media\DeleteMediaRequest;
+use App\Http\Requests\Media\MarkAsWatchedRequest;
 use App\Http\Resources\MediaResource;
 use App\Models\Media;
 use App\Models\MediaUserWatched;
@@ -13,9 +17,7 @@ use App\Models\User;
 use App\Models\Payment;
 use App\Services\MediaService;
 use App\Services\PaymentService;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class MediaController extends Controller
 {
@@ -31,8 +33,8 @@ class MediaController extends Controller
             $query = $this->mediaService->searchByTag($request->input('search'));
         }
 
-        $perPage = max(1, min((int) $request->input('per_page', 15), 100));
-        $page = (int) $request->input('page', 1);
+        $perPage = $request->input('per_page', 15);
+        $page = $request->input('page', 1);
         $media = $query->paginate($perPage, ['*'], 'page', $page);
 
         return MediaResource::collection($media);
@@ -41,22 +43,8 @@ class MediaController extends Controller
     /**
      * Create payment intent with metadata only (no file upload)
      */
-    public function createPaymentIntent(Request $request)
+    public function createPaymentIntent(CreatePaymentIntentRequest $request)
     {
-        $request->validate([
-            'description' => 'nullable|string|max:1000',
-            'tags' => 'nullable|array',
-            'tags.*' => 'string|max:255',
-            'reward' => 'required|integer|min:100|max:100000000000',
-            'questions' => 'nullable|array',
-            'questions.*.question' => 'required|string|max:1000',
-            'questions.*.answer' => 'required|string|in:A,B,C,D',
-            'questions.*.option_a' => 'required|string|max:255',
-            'questions.*.option_b' => 'required|string|max:255',
-            'questions.*.option_c' => 'required|string|max:255',
-            'questions.*.option_d' => 'required|string|max:255',
-        ]);
-
         return DB::transaction(function () use ($request) {
             // Create a temporary media record with metadata only
             $media = Media::create([
@@ -111,43 +99,17 @@ class MediaController extends Controller
     }
 
     /**
-     * Upload media after successful payment
+     * Upload media after payment is completed
      */
-    public function uploadAfterPayment(Request $request)
+    public function uploadAfterPayment(UploadAfterPaymentRequest $request)
     {
-        $request->validate([
-            'payment_id' => 'required|string|exists:payments,id',
-            'file' => 'required|file|max:10485760|mimes:jpeg,png,jpg,gif,mp4',
-            'description' => 'nullable|string|max:1000',
-            'tags' => 'nullable|array',
-            'tags.*' => 'string|max:255',
-            'reward' => 'required|integer|min:100|max:100000000000',
-            'questions' => 'nullable|array',
-            'questions.*.question' => 'required|string|max:1000',
-            'questions.*.answer' => 'required|string|in:A,B,C,D',
-            'questions.*.option_a' => 'required|string|max:255',
-            'questions.*.option_b' => 'required|string|max:255',
-            'questions.*.option_c' => 'required|string|max:255',
-            'questions.*.option_d' => 'required|string|max:255',
-        ]);
-
         return DB::transaction(function () use ($request) {
-            // Find the payment and verify it's successful
+            // Get payment and media (validation already done in request)
             $payment = Payment::where('id', $request->input('payment_id'))
                 ->where('status', Payment::STATUS_SUCCEEDED)
                 ->firstOrFail();
 
-            // Find the associated media
             $media = $payment->media;
-            
-            if (!$media) {
-                return response()->json(['message' => 'Media not found'], 404);
-            }
-
-            // Verify ownership
-            if ($media->user_id !== $request->user()->id) {
-                return response()->json(['message' => 'Forbidden'], 403);
-            }
 
             // Upload the actual file
             $uploadedMedia = $this->mediaService->store(
@@ -174,7 +136,6 @@ class MediaController extends Controller
                 'amount_paid' => $request->input('reward'),
             ]);
 
-            // Update tags
             $media->tags()->detach();
             if ($request->input('tags')) {
                 $tags = $request->input('tags', []);
@@ -192,7 +153,6 @@ class MediaController extends Controller
                 $media->tags()->attach($mediaTags);
             }
 
-            // Update questions
             $media->questions()->delete();
             if ($request->has('questions')) {
                 foreach ($request->input('questions') as $questionData) {
@@ -200,7 +160,6 @@ class MediaController extends Controller
                 }
             }
 
-            // Delete the temporary uploaded media
             $uploadedMedia->delete();
 
             return response()->json([
@@ -210,29 +169,24 @@ class MediaController extends Controller
         });
     }
 
-    public function show(Request $request, $id)
+    public function show(ShowMediaRequest $request, $id)
     {
         $media = Media::with('tags')->findOrFail($id);
-        if ($media->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
         return new MediaResource($media);
     }
 
-    public function destroy(Request $request, $id)
+    public function destroy(DeleteMediaRequest $request, $id)
     {
         $media = Media::findOrFail($id);
-        if ($media->user_id !== $request->user()->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-        $media->tags()->detach();
-        $media->delete();
+
+        // Use MediaService delete method which handles both S3 and database cleanup
+        $this->mediaService->delete($media);
+
         return response()->json(['message' => 'Media deleted successfully']);
     }
 
-    public function markAsWatched(Media $media, User $user, Request $request)
+    public function markAsWatched(Media $media, User $user, MarkAsWatchedRequest $request)
     {
-        //check that the user has not already watched the  media
         if (!$media->watchedByUsers()->where('user_id', $user->id)->exists()) {
             MediaUserWatched::create([
                 'user_id' => $user->id,
@@ -240,7 +194,6 @@ class MediaController extends Controller
             ]);
         }
 
-        // Return the updated media with has_watched status
         return response()->json([
             'message' => 'Media marked as watched',
             'success' => true,

@@ -32,6 +32,8 @@ class MediaResource extends JsonResource
             'updated_at' => $this->updated_at,
             'has_watched' => $hasWatched,
             'thumbnail' => $this->thumbnail,
+            'uploader_id' => $this->user_id,
+            'uploader_username' => $this->user->username,
         ];
     }
 

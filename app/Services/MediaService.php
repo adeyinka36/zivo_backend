@@ -101,7 +101,27 @@ class MediaService
      */
     public function delete(Media $media): bool
     {
-        Storage::disk($media->disk)->delete($media->path);
+        // Skip storage deletion for external URLs (disk = 'url')
+        // These are external files not managed by our storage system
+        if ($media->disk !== 'url') {
+            try {
+                Storage::disk($media->disk)->delete($media->name);
+            } catch (\Exception $e) {
+                Log::warning("Failed to delete file from storage", [
+                    'media_id' => $media->id,
+                    'disk' => $media->disk,
+                    'path' => $media->path,
+                    'error' => $e->getMessage()
+                ]);
+                // Continue with database deletion even if storage deletion fails
+            }
+        } else {
+            Log::info("Skipping storage deletion for external URL", [
+                'media_id' => $media->id,
+                'path' => $media->path
+            ]);
+        }
+
         $media->tags()->detach();
         return $media->delete();
     }
@@ -113,4 +133,4 @@ class MediaService
                   ->orWhere('slug', 'like', "%{$searchTerm}%");
         });
     }
-} 
+}

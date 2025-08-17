@@ -67,11 +67,34 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
-
-        return response()->json([
-            'message' => 'Successfully logged out'
-        ]);
+        try {
+            $user = $request->user();
+            
+            // Delete all tokens for this user (not just the current one)
+            $user->tokens()->delete();
+            
+            // Log the logout for audit purposes
+            \Log::info('User logged out', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+            
+            return response()->json([
+                'message' => 'Successfully logged out'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Logout error', [
+                'user_id' => $request->user()->id ?? 'unknown',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            return response()->json([
+                'message' => 'Logout completed'
+            ]);
+        }
     }
 
     public function verifyEmail(Request $request)
