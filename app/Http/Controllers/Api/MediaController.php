@@ -9,9 +9,12 @@ use App\Http\Requests\Media\UploadAfterPaymentRequest;
 use App\Http\Requests\Media\ShowMediaRequest;
 use App\Http\Requests\Media\DeleteMediaRequest;
 use App\Http\Requests\Media\MarkAsWatchedRequest;
+use App\Http\Requests\QuizResultRequest;
 use App\Http\Resources\MediaResource;
+use App\Jobs\QuizInvitation;
 use App\Models\Media;
 use App\Models\MediaUserWatched;
+use App\Models\Question;
 use App\Models\Tag;
 use App\Models\User;
 use App\Models\Payment;
@@ -27,7 +30,10 @@ class MediaController extends Controller
 
     public function index(ListMediaRequest $request)
     {
-        $query = Media::with('tags')->orderBy('created_at', 'desc')->where('size', '>', 0);
+        $query = Media::with('tags')
+            ->orderBy('created_at', 'desc')
+            ->where('size', '>', 0)
+            ->where('quiz_played', false);
 
         if ($request->filled('search')) {
             $query = $this->mediaService->searchByTag($request->input('search'));
@@ -194,10 +200,35 @@ class MediaController extends Controller
             ]);
         }
 
+        if($media->watchedByUsers()->count() >= config('quiz.trigger_count', 1)) {
+            $media->update(['quiz_played' => true]);
+            QuizInvitation::dispatch($media);
+        }
+
         return response()->json([
             'message' => 'Media marked as watched',
             'success' => true,
             'media' => new MediaResource($media->load('tags'))
+        ], 200);
+    }
+
+    public function processQuizResult(QuizResultRequest $request)
+    {
+        $data = $request->validated();
+
+        // Find the question by ID
+        $question = $data['question_id'] ? Question::find($data['question_id']) : null;
+
+        if (!$question) {
+            return response()->json(['message' => 'Question not found'], 404);
+        }
+
+        //dispatch job to handle quiz result processing
+
+        return response()->json([
+            'message' => 'Quiz result processed successfully',
+            'is_correct' => $data['is_correct'],
+            'question_id' => $data['question_id']
         ], 200);
     }
 }

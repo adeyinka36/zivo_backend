@@ -14,6 +14,7 @@ class MediaWithQuestionResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $questions = $this->whenLoaded('questions');
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -22,7 +23,7 @@ class MediaWithQuestionResource extends JsonResource
             'url' => $this->getFileUrl(),
             'description' => $this->description,
             'tags' => TagResource::collection($this->whenLoaded('tags')),
-            'question' => $this->questions()?->inRandomOrder()->first(),
+            'question' => $questions() ? new QuestionResource($questions->inRandomOrder()->first()) : [],
             'mime_type' => $this->mime_type,
             'media_type' => $this->getMediaType(),
         ];

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\QuizInvitation;
 use App\Models\Media;
 use Illuminate\Console\Command;
 
@@ -38,7 +39,7 @@ class QuizManager extends Command
         foreach ($allMediaThatHaveQuizzesAndHaveBeenWatched as $media) {
             if ($media->questions()->count() > 0) {
                 $this->info("Scheduling quiz invitation for media ID: {$media->id}");
-                \App\Jobs\QuizInvitation::dispatch($media);
+                QuizInvitation::dispatch($media);
             } else {
                 $this->warn("No quizzes found for media ID: {$media->id}");
             }

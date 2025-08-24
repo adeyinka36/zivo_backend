@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
-class ClearMediaOlderThan24Hours extends Command
+class ClearDayOldMedia extends Command
 {
     /**
      * The name and signature of the console command.

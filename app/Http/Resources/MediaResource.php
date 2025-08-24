@@ -12,11 +12,7 @@ class MediaResource extends JsonResource
     {
         /** @var Media $this */
         $user = $request->user();
-        $hasWatched = false;
-
-        if ($user) {
-            $hasWatched = $this->watchedByUsers()->where('user_id', $user->id)->exists();
-        }
+        $hasWatched = $this->watchedByUsers()->where('user_id', $user->id)->exists();
 
         return [
             'id' => $this->id,
@@ -34,6 +30,7 @@ class MediaResource extends JsonResource
             'thumbnail' => $this->thumbnail,
             'uploader_id' => $this->user_id,
             'uploader_username' => $this->user->username,
+            'view_count' => $this->watchedByUsers()->count(),
         ];
     }
 

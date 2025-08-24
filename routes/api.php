@@ -63,6 +63,11 @@ Route::prefix('v1')->group(function () {
         Route::prefix('push-token')->group(function () {
             Route::post('{user}', [NotificationController::class, 'store']);
         });
+
+        Route::prefix('quiz')->group(function () {
+            Route::post('result', [MediaController::class, 'processQuizResult'])
+                ->name('quiz.result');
+        });
     });
 
     // Health check

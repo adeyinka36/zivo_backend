@@ -36,13 +36,7 @@ class QuizInvitation implements ShouldQueue
             Log::info("No push token for player who watched media: {$this->media->id}");
             return;
         }
-        $selectedUsers = array_rand($userTokens, 2);
-
-        //just for tests
-//        $testUserTokens = User::whereIn('email', ['adeyinka.giwa36@gmail.com', 'kymakurumure@hotmail.com',])
-//            ->whereNotNull('push_token')
-//            ->pluck('push_token')
-//            ->toArray();
+        $selectedUser = array_rand($userTokens, 1);
 
         $title = 'Quiz Invitation';
         $body = "You have been invited to participate in a quiz worth \$$reward in AWS voucher.";
@@ -51,6 +45,6 @@ class QuizInvitation implements ShouldQueue
             'type' => 'quiz_invitation',
         ];
 
-          SendNotification::toExpoNotification($selectedUsers, $title, $body, $data);
+        SendNotification::toExpoNotification($selectedUser, $title, $body, $data);
     }
 }

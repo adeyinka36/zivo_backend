@@ -27,7 +27,8 @@ class Media extends Model
         'payment_status',
         'stripe_payment_intent_id',
         'paid_at',
-        'amount_paid'
+        'amount_paid',
+        'quiz_played',
     ];
 
     protected $casts = [
@@ -59,7 +60,8 @@ class Media extends Model
 
     public function watchedByUsers(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'media_users_watched', 'media_id', 'user_id');
+        return $this->belongsToMany(User::class, 'media_users_watched', 'media_id', 'user_id')
+            ->where('media_users_watched.user_id', '!=', $this->user_id);
     }
 
     public function getRouteKeyName()

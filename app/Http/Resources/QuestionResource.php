@@ -17,8 +17,6 @@ class QuestionResource extends JsonResource
             'option_b' => $this->option_b,
             'option_c' => $this->option_c,
             'option_d' => $this->option_d,
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
         ];
     }
-} 
+}
