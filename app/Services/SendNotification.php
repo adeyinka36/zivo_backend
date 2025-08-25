@@ -13,10 +13,10 @@ class SendNotification extends Notification
     /**
      * @throws ConnectionException
      */
-    public static function toExpoNotification(array $playerTokens, string $title, string $body, array $data): void
+    public static function toExpoNotification(string $playerTokens, string $title, string $body, array $data): void
     {
         $payload = [
-            'to' => $playerTokens,
+            'to' => [$playerTokens],
             'title' => $title,
             'body' => $body,
             'data' => $data,

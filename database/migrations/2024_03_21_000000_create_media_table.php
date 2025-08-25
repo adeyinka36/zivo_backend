@@ -21,6 +21,7 @@ return new class extends Migration
             $table->string('disk');
             $table->text('description')->nullable();
             $table->boolean('has_reward')->default(true);
+            $table->boolean('quiz_played')->default(false);
 
             $table->timestamps();
         });

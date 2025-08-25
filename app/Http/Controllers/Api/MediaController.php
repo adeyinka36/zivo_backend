@@ -11,6 +11,7 @@ use App\Http\Requests\Media\DeleteMediaRequest;
 use App\Http\Requests\Media\MarkAsWatchedRequest;
 use App\Http\Requests\QuizResultRequest;
 use App\Http\Resources\MediaResource;
+use App\Jobs\AllocateReward;
 use App\Jobs\QuizInvitation;
 use App\Models\Media;
 use App\Models\MediaUserWatched;
@@ -21,6 +22,7 @@ use App\Models\Payment;
 use App\Services\MediaService;
 use App\Services\PaymentService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class MediaController extends Controller
 {
@@ -201,7 +203,6 @@ class MediaController extends Controller
         }
 
         if($media->watchedByUsers()->count() >= config('quiz.trigger_count', 1)) {
-            $media->update(['quiz_played' => true]);
             QuizInvitation::dispatch($media);
         }
 
@@ -217,18 +218,23 @@ class MediaController extends Controller
         $data = $request->validated();
 
         // Find the question by ID
-        $question = $data['question_id'] ? Question::find($data['question_id']) : null;
+        $media = $data['media_id'] ? Media::find($data['media_id']) : null;
 
-        if (!$question) {
-            return response()->json(['message' => 'Question not found'], 404);
+        if (!$media) {
+            return response()->json(['message' => 'Media not found'], 404);
         }
+        $media->update(['quiz_played' => true]);
 
         //dispatch job to handle quiz result processing
+        Log::info('Quiz result received----', $data);
+
+        if(!$data['is_correct']) {
+            AllocateReward::dispatch($media, $request->user());
+        }
 
         return response()->json([
             'message' => 'Quiz result processed successfully',
             'is_correct' => $data['is_correct'],
-            'question_id' => $data['question_id']
         ], 200);
     }
 }

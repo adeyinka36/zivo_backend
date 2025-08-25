@@ -22,8 +22,8 @@ class QuizResultRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'is_corrrect' => 'required|boolean',
-            'question_id' => 'required|exists:questions,id',
+            'is_correct' => 'required|boolean',
+            'media_id' => 'required|exists:media,id',
         ];
     }
 
@@ -37,8 +37,8 @@ class QuizResultRequest extends FormRequest
         return [
             'is_correct.required' => 'The is_correct field is required.',
             'is_correct.boolean' => 'The is_correct field must be true or false.',
-            'question_id.required' => 'The question_id field is required.',
-            'question_id.exists' => 'The selected question_id does not exist.',
+            'media_id.required' => 'The media_id field is required.',
+            'media_id.exists' => 'The selected media_id is invalid.',
         ];
     }
 }

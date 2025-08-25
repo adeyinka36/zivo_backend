@@ -31,12 +31,7 @@ class QuizInvitation implements ShouldQueue
     {
         $reward = ($this->media->reward)/100;
         $peopleWhoWatched = $this->media->watchedByUsers();
-        $userTokens  = $peopleWhoWatched->pluck('push_token')->toArray();
-        if (empty($userTokens)) {
-            Log::info("No push token for player who watched media: {$this->media->id}");
-            return;
-        }
-        $selectedUser = array_rand($userTokens, 1);
+        $winnerUserToken  = $peopleWhoWatched->inRandomOrder()->get()->pluck('push_token')->first();
 
         $title = 'Quiz Invitation';
         $body = "You have been invited to participate in a quiz worth \$$reward in AWS voucher.";
@@ -45,6 +40,7 @@ class QuizInvitation implements ShouldQueue
             'type' => 'quiz_invitation',
         ];
 
-        SendNotification::toExpoNotification($selectedUser, $title, $body, $data);
+        Log::info("Sending quiz invitation to user with token-----: {$winnerUserToken} for media: {$this->media->id}");
+        SendNotification::toExpoNotification($winnerUserToken, $title, $body, $data);
     }
 }

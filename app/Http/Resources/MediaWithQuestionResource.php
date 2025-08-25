@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Http\Resources\MissingValue;
 
 class MediaWithQuestionResource extends JsonResource
 {
@@ -14,7 +15,6 @@ class MediaWithQuestionResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $questions = $this->whenLoaded('questions');
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -23,7 +23,7 @@ class MediaWithQuestionResource extends JsonResource
             'url' => $this->getFileUrl(),
             'description' => $this->description,
             'tags' => TagResource::collection($this->whenLoaded('tags')),
-            'question' => $questions() ? new QuestionResource($questions->inRandomOrder()->first()) : [],
+            'question' => $this->questions() ? new QuestionResource($this->questions()->inRandomOrder()->first()) : null,
             'mime_type' => $this->mime_type,
             'media_type' => $this->getMediaType(),
         ];
