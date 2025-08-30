@@ -105,7 +105,7 @@ class MediaService
         // These are external files not managed by our storage system
         if ($media->disk !== 'url') {
             try {
-                Storage::disk($media->disk)->delete($media->name);
+                Storage::disk($media->disk)->delete($media->path);
             } catch (\Exception $e) {
                 Log::warning("Failed to delete file from storage", [
                     'media_id' => $media->id,

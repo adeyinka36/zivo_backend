@@ -18,7 +18,7 @@ class QuizInvitation implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(private readonly Media $media)
+    public function __construct(private readonly Media $media, private readonly User $winner)
     {
         //
     }
@@ -31,7 +31,7 @@ class QuizInvitation implements ShouldQueue
     {
         $reward = ($this->media->reward)/100;
         $peopleWhoWatched = $this->media->watchedByUsers();
-        $winnerUserToken  = $peopleWhoWatched->inRandomOrder()->get()->pluck('push_token')->first();
+        $winnerUserToken  = $this->winner->push_token;
 
         $title = 'Quiz Invitation';
         $body = "You have been invited to participate in a quiz worth \$$reward in AWS voucher.";
@@ -40,7 +40,7 @@ class QuizInvitation implements ShouldQueue
             'type' => 'quiz_invitation',
         ];
 
-        Log::info("Sending quiz invitation to user with token-----: {$winnerUserToken} for media: {$this->media->id}");
+        Log::info("Sending quiz invitation to user {$this->winner->id} with token-----: {$winnerUserToken} for media: {$this->media->id}");
         SendNotification::toExpoNotification($winnerUserToken, $title, $body, $data);
     }
 }

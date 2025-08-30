@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Models\Payment;
 use App\Services\MediaService;
 use App\Services\PaymentService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -112,14 +113,12 @@ class MediaController extends Controller
     public function uploadAfterPayment(UploadAfterPaymentRequest $request)
     {
         return DB::transaction(function () use ($request) {
-            // Get payment and media (validation already done in request)
             $payment = Payment::where('id', $request->input('payment_id'))
                 ->where('status', Payment::STATUS_SUCCEEDED)
                 ->firstOrFail();
 
             $media = $payment->media;
 
-            // Upload the actual file
             $uploadedMedia = $this->mediaService->store(
                 $request->file('file'),
                 [
@@ -129,7 +128,6 @@ class MediaController extends Controller
                 $request->user()->id
             );
 
-            // Update the existing media record with the uploaded file data
             $media->update([
                 'name' => $uploadedMedia->name,
                 'file_name' => $uploadedMedia->file_name,
@@ -193,7 +191,7 @@ class MediaController extends Controller
         return response()->json(['message' => 'Media deleted successfully']);
     }
 
-    public function markAsWatched(Media $media, User $user, MarkAsWatchedRequest $request)
+    public function markAsWatched(Media $media, User $user, MarkAsWatchedRequest $request): JsonResponse
     {
         if (!$media->watchedByUsers()->where('user_id', $user->id)->exists()) {
             MediaUserWatched::create([
@@ -202,7 +200,7 @@ class MediaController extends Controller
             ]);
 
             if($media->quiz_number === $media->watchedByUsers()->count()) {
-                QuizInvitation::dispatch($media);
+                QuizInvitation::dispatch($media, $user);
             }
         }
 
@@ -214,7 +212,7 @@ class MediaController extends Controller
         ], 200);
     }
 
-    public function processQuizResult(QuizResultRequest $request)
+    public function processQuizResult(QuizResultRequest $request): JsonResponse
     {
         $data = $request->validated();
 
@@ -224,7 +222,11 @@ class MediaController extends Controller
         if (!$media) {
             return response()->json(['message' => 'Media not found'], 404);
         }
-        $media->update(['quiz_played' => true]);
+
+//        if(!$data['is_correct']){
+//            $media->update(['quiz_played' => true]);
+//        }
+
 
         //dispatch job to handle quiz result processing
         Log::info('Quiz result received----', $data);

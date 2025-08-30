@@ -48,6 +48,7 @@ class UploadAfterPaymentRequest extends FormRequest
             'questions.*.option_b' => 'required|string|max:255',
             'questions.*.option_c' => 'required|string|max:255',
             'questions.*.option_d' => 'required|string|max:255',
+            'quiz_number' => 'required|integer|min:1|max:100',
         ];
     }
 
@@ -116,6 +117,11 @@ class UploadAfterPaymentRequest extends FormRequest
             'questions.*.option_c.max' => 'Option C cannot exceed 255 characters.',
             'questions.*.option_d.required' => 'Option D is required.',
             'questions.*.option_d.max' => 'Option D cannot exceed 255 characters.',
+
+            'quiz_number.required' => 'Quiz number is required.',
+            'quiz_number.integer' => 'Quiz number must be a valid number.',
+            'quiz_number.min' => 'Quiz number must be at least 1.',
+            'quiz_number.max' => 'Quiz number cannot exceed 100.',
         ];
     }
 }

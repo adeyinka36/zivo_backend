@@ -59,8 +59,8 @@ class CreatePaymentIntentRequest extends FormRequest
 
             'quiz_number.required' => 'Quiz number is required.',
             'quiz_number.integer' => 'Quiz number must be a valid number.',
-            'quiz_number.min' => 'Quiz number must be at least $1.00.',
-            'quiz_number.max' => 'Quiz number cannot exceed 255 characters.',
+            'quiz_number.min' => 'Quiz number must be at least 1.',
+            'quiz_number.max' => 'Quiz number cannot exceed 100.',
         ];
     }
 } 
