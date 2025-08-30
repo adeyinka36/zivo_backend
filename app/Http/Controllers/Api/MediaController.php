@@ -200,11 +200,12 @@ class MediaController extends Controller
                 'user_id' => $user->id,
                 'media_id' => $media->id,
             ]);
+
+            if($media->quiz_number === $media->watchedByUsers()->count()) {
+                QuizInvitation::dispatch($media);
+            }
         }
 
-        if($media->watchedByUsers()->count() >= config('quiz.trigger_count', 1)) {
-            QuizInvitation::dispatch($media);
-        }
 
         return response()->json([
             'message' => 'Media marked as watched',
@@ -228,7 +229,7 @@ class MediaController extends Controller
         //dispatch job to handle quiz result processing
         Log::info('Quiz result received----', $data);
 
-        if(!$data['is_correct']) {
+        if($data['is_correct']) {
             AllocateReward::dispatch($media, $request->user());
         }
 

@@ -18,6 +18,7 @@ class CreatePaymentIntentRequest extends FormRequest
             'tags' => 'nullable|array|max:10',
             'tags.*' => 'string|max:255|regex:/^[a-zA-Z0-9\s\-_#]+$/',
             'reward' => 'required|integer|min:100|max:100000000000',
+            'quiz_number' => 'required|integer|min:1|max:100',
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:1000',
             'questions.*.answer' => 'required|string|in:A,B,C,D',
@@ -55,6 +56,11 @@ class CreatePaymentIntentRequest extends FormRequest
             'questions.*.option_c.max' => 'Option C cannot exceed 255 characters.',
             'questions.*.option_d.required' => 'Option D is required.',
             'questions.*.option_d.max' => 'Option D cannot exceed 255 characters.',
+
+            'quiz_number.required' => 'Quiz number is required.',
+            'quiz_number.integer' => 'Quiz number must be a valid number.',
+            'quiz_number.min' => 'Quiz number must be at least $1.00.',
+            'quiz_number.max' => 'Quiz number cannot exceed 255 characters.',
         ];
     }
 } 

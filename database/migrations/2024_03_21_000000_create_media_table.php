@@ -22,6 +22,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->boolean('has_reward')->default(true);
             $table->boolean('quiz_played')->default(false);
+            $table->integer('quiz_number');
 
             $table->timestamps();
         });

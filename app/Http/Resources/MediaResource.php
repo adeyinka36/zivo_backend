@@ -31,6 +31,7 @@ class MediaResource extends JsonResource
             'uploader_id' => $this->user_id,
             'uploader_username' => $this->user->username,
             'view_count' => $this->watchedByUsers()->count(),
+            'quiz_number' => $this->quiz_number,
         ];
     }
 

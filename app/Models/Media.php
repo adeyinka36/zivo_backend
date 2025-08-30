@@ -29,6 +29,7 @@ class Media extends Model
         'paid_at',
         'amount_paid',
         'quiz_played',
+        'quiz_number'
     ];
 
     protected $casts = [
