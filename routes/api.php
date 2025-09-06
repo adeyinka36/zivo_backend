@@ -29,12 +29,10 @@ Route::prefix('v1')->group(function () {
         ->name('password.email');
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.reset');
 
-    // Email verification
     Route::get('/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail'])
         ->middleware(['signed'])
         ->name('verification.verify');
 
-    // Protected routes
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/user', function (Request $request) {
             return $request->user();
@@ -42,12 +40,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail']);
 
-        // Profile routes
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::put('/profile', [ProfileController::class, 'update']);
         Route::get('/user/media', [ProfileController::class, 'getUserMedia']);
 
-        // Media routes
         Route::get('media', [MediaController::class, 'index']);
         Route::post('media/payment-intent', [MediaController::class, 'createPaymentIntent']);
         Route::post('media/upload-after-payment', [MediaController::class, 'uploadAfterPayment']);
@@ -55,7 +51,6 @@ Route::prefix('v1')->group(function () {
         Route::delete('media/{id}', [MediaController::class, 'destroy']);
         Route::post('media-watched/{media}/{user}', [MediaController::class, 'markAsWatched']);
 
-        // Payment routes
         Route::get('payments/{paymentId}/status', [PaymentController::class, 'getPaymentStatus']);
         Route::get('payments/history', [PaymentController::class, 'getPaymentHistory']);
         Route::post('payments/{payment}/refund', [PaymentController::class, 'requestRefund']);
@@ -70,7 +65,6 @@ Route::prefix('v1')->group(function () {
         });
     });
 
-    // Health check
     Route::get('/health', function () {
         return response()->json([
             'status' => 'success',
@@ -79,6 +73,5 @@ Route::prefix('v1')->group(function () {
         ]);
     });
 
-    // Webhook route (no auth required)
     Route::post('webhooks/stripe', [PaymentController::class, 'webhook']);
 });

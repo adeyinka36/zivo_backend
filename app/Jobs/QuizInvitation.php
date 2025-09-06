@@ -30,7 +30,6 @@ class QuizInvitation implements ShouldQueue
     public function handle(): void
     {
         $reward = ($this->media->reward)/100;
-        $peopleWhoWatched = $this->media->watchedByUsers();
         $winnerUserToken  = $this->winner->push_token;
 
         $title = 'Quiz Invitation';

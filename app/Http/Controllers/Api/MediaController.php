@@ -223,13 +223,8 @@ class MediaController extends Controller
             return response()->json(['message' => 'Media not found'], 404);
         }
 
-//        if(!$data['is_correct']){
-//            $media->update(['quiz_played' => true]);
-//        }
-
-
         //dispatch job to handle quiz result processing
-        Log::info('Quiz result received----', $data);
+        Log::info('Quizxxxx result received----', $data);
 
         if($data['is_correct']) {
             AllocateReward::dispatch($media, $request->user());

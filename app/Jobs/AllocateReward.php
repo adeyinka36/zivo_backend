@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 
@@ -31,7 +32,7 @@ class AllocateReward implements ShouldQueue
         try {
             $this->sendAmazonGiftCard($this->winner);
         } catch (ConnectionException|RequestException $e) {
-
+            Log::error('Failed to send Amazon gift card:-----> ' . $e->getMessage());
         }
     }
 
@@ -42,7 +43,7 @@ class AllocateReward implements ShouldQueue
     public function sendAmazonGiftCard(User $winner)
     {
         $apiKey = config('services.tremendous.api_key');
-        $endpoint = config('services.tremendous.api_key').'/orders';
+        $endpoint = config('services.tremendous.api_endpoint').'/orders';
 
         $payload = [
             'external_id' => (string) Str::uuid(),
@@ -52,7 +53,7 @@ class AllocateReward implements ShouldQueue
             'reward' => [
                 'value' => [
                     'denomination'  => 25,
-                    'currency_code' => 'USD',
+//                    'currency_code' => 'USD',
                 ],
                 'delivery' => [
                     'method' => 'EMAIL',
@@ -68,7 +69,10 @@ class AllocateReward implements ShouldQueue
         ];
 
         $response = Http::withToken($apiKey)
-            ->acceptJson()
+            ->withHeaders([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ])
             ->asJson()
             ->post($endpoint, $payload);
 
