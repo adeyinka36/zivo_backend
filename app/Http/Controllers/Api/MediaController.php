@@ -11,8 +11,8 @@ use App\Http\Requests\Media\DeleteMediaRequest;
 use App\Http\Requests\Media\MarkAsWatchedRequest;
 use App\Http\Requests\QuizResultRequest;
 use App\Http\Resources\MediaResource;
+use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
-use App\Jobs\QuizInvitation;
 use App\Models\Media;
 use App\Models\MediaUserWatched;
 use App\Models\Question;
@@ -193,6 +193,9 @@ class MediaController extends Controller
 
     public function markAsWatched(Media $media, User $user, MarkAsWatchedRequest $request): JsonResponse
     {
+        $shouldTriggerQuiz = false;
+        $quizData = null;
+
         if (!$media->watchedByUsers()->where('user_id', $user->id)->exists()) {
             MediaUserWatched::create([
                 'user_id' => $user->id,
@@ -200,16 +203,23 @@ class MediaController extends Controller
             ]);
 
             if($media->quiz_number === $media->watchedByUsers()->count()) {
-                QuizInvitation::dispatch($media, $user);
+                $shouldTriggerQuiz = true;
+                $quizData = new MediaWithQuestionResource($media);
             }
         }
 
-
-        return response()->json([
+        $response = [
             'message' => 'Media marked as watched',
             'success' => true,
-            'media' => new MediaResource($media->load('tags'))
-        ], 200);
+            'media' => new MediaResource($media->load('tags')),
+            'trigger_quiz' => $shouldTriggerQuiz
+        ];
+
+        if ($shouldTriggerQuiz && $quizData) {
+            $response['quiz_data'] = $quizData;
+        }
+
+        return response()->json($response, 200);
     }
 
     public function processQuizResult(QuizResultRequest $request): JsonResponse
@@ -223,11 +233,10 @@ class MediaController extends Controller
             return response()->json(['message' => 'Media not found'], 404);
         }
 
-        //dispatch job to handle quiz result processing
-        Log::info('Quizxxxx result received----', $data);
-
         if($data['is_correct']) {
             AllocateReward::dispatch($media, $request->user());
+        }else{
+            MediaUserWatched::where('media_id', $media->id)->delete();
         }
 
         return response()->json([

@@ -4,7 +4,6 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProfileController;
-use App\Http\Controllers\NotificationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -55,9 +54,6 @@ Route::prefix('v1')->group(function () {
         Route::get('payments/history', [PaymentController::class, 'getPaymentHistory']);
         Route::post('payments/{payment}/refund', [PaymentController::class, 'requestRefund']);
 
-        Route::prefix('push-token')->group(function () {
-            Route::post('{user}', [NotificationController::class, 'store']);
-        });
 
         Route::prefix('quiz')->group(function () {
             Route::post('result', [MediaController::class, 'processQuizResult'])
