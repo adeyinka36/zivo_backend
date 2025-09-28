@@ -14,5 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->render(function (\App\Exceptions\Auth\InvalidCredentialsException $e) {
+            return response()->json(['message' => $e->getMessage()], $e->getCode());
+        });
+        
+        $exceptions->render(function (\App\Exceptions\Auth\RegistrationFailedException $e) {
+            return response()->json(['message' => $e->getMessage()], $e->getCode());
+        });
     })->create();

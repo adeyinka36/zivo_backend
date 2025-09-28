@@ -120,7 +120,7 @@ return [
 
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
-        'store' => env('APP_MAINTENANCE_STORE', 'database'),
+        'redux' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
     'default_video_thumbnail' => env('DEFAULT_VIDEO_THUMBNAIL'),
