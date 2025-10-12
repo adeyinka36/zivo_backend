@@ -15,7 +15,8 @@ use App\Models\Tag;
 class MediaService
 {
     public function __construct(
-        private readonly TagService $tagService
+        private readonly TagService $tagService,
+        private readonly ThumbnailService $thumbnailService
     ) {}
 
     /**
@@ -48,6 +49,7 @@ class MediaService
             'description' => $metadata['description'] ?? null,
             'reward' => $metadata['reward'] ?? 100,
         ]);
+
 
         if (isset($metadata['tags']) && is_array($metadata['tags'])) {
             foreach ($metadata['tags'] as $tagName) {
@@ -132,5 +134,20 @@ class MediaService
             $query->where('name', 'like', "%{$searchTerm}%")
                   ->orWhere('slug', 'like', "%{$searchTerm}%");
         });
+    }
+
+    private function isVideoFile(UploadedFile $file): bool
+    {
+        $videoMimeTypes = [
+            'video/mp4',
+            'video/avi',
+            'video/mov',
+            'video/wmv',
+            'video/flv',
+            'video/webm',
+            'video/mkv'
+        ];
+        
+        return in_array($file->getMimeType(), $videoMimeTypes);
     }
 }

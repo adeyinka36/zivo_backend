@@ -13,6 +13,7 @@ use App\Http\Requests\QuizResultRequest;
 use App\Http\Resources\MediaResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
+use App\Jobs\GenerateThumbnailJob;
 use App\Models\Media;
 use App\Models\MediaUserWatched;
 use App\Models\Question;
@@ -21,6 +22,7 @@ use App\Models\User;
 use App\Models\Payment;
 use App\Services\MediaService;
 use App\Services\PaymentService;
+use App\Services\TagService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -71,19 +73,9 @@ class MediaController extends Controller
 
             // Attach tags if provided
             if ($request->input('tags')) {
-                $tags = $request->input('tags', []);
-                $mediaTags = [];
-                foreach ($tags as $tagName) {
-                    if (!Tag::where('name', $tagName)->exists()) {
-                        $mediaTags[] = Tag::create([
-                            'name' => $tagName,
-                            'slug' => str($tagName)->slug()
-                        ]);
-                    } else {
-                        $mediaTags[] = Tag::where('name', $tagName)->first();
-                    }
-                }
-                $media->tags()->attach($mediaTags);
+                $tagService = app(TagService::class);
+                $tags = $tagService->createOrFindTags($request->input('tags', []));
+                $media->tags()->attach($tags);
             }
 
             // Create questions if provided
@@ -112,22 +104,22 @@ class MediaController extends Controller
      */
     public function uploadAfterPayment(UploadAfterPaymentRequest $request)
     {
-        return DB::transaction(function () use ($request) {
-            $payment = Payment::where('id', $request->input('payment_id'))
-                ->where('status', Payment::STATUS_SUCCEEDED)
-                ->firstOrFail();
+        $payment = Payment::where('id', $request->input('payment_id'))
+            ->where('status', Payment::STATUS_SUCCEEDED)
+            ->firstOrFail();
 
-            $media = $payment->media;
+        $media = $payment->media;
 
-            $uploadedMedia = $this->mediaService->store(
-                $request->file('file'),
-                [
-                    'description' => $request->input('description'),
-                    'reward' => $request->input('reward'),
-                ],
-                $request->user()->id
-            );
+        $uploadedMedia = $this->mediaService->store(
+            $request->file('file'),
+            [
+                'description' => $request->input('description'),
+                'reward' => $request->input('reward'),
+            ],
+            $request->user()->id
+        );
 
+        DB::transaction(function () use ($media, $uploadedMedia, $request) {
             $media->update([
                 'name' => $uploadedMedia->name,
                 'file_name' => $uploadedMedia->file_name,
@@ -140,39 +132,43 @@ class MediaController extends Controller
                 'payment_status' => 'paid',
                 'paid_at' => now(),
                 'amount_paid' => $request->input('reward'),
+                'quiz_number' => $request->input('quiz_number'),
             ]);
-
-            $media->tags()->detach();
-            if ($request->input('tags')) {
-                $tags = $request->input('tags', []);
-                $mediaTags = [];
-                foreach ($tags as $tagName) {
-                    if (!Tag::where('name', $tagName)->exists()) {
-                        $mediaTags[] = Tag::create([
-                            'name' => $tagName,
-                            'slug' => str($tagName)->slug()
-                        ]);
-                    } else {
-                        $mediaTags[] = Tag::where('name', $tagName)->first();
-                    }
-                }
-                $media->tags()->attach($mediaTags);
-            }
-
-            $media->questions()->delete();
-            if ($request->has('questions')) {
-                foreach ($request->input('questions') as $questionData) {
-                    $media->questions()->create($questionData);
-                }
-            }
 
             $uploadedMedia->delete();
-
-            return response()->json([
-                'media' => new MediaResource($media->load('tags')),
-                'message' => 'Media uploaded successfully after payment'
-            ]);
         });
+
+        $this->processMediaMetadata($media, $request);
+
+        // Dispatch thumbnail generation job asynchronously
+        if ($media->media_type === 'video') {
+            GenerateThumbnailJob::dispatch($media->id);
+        }
+
+        return response()->json([
+            'media' => new MediaResource($media->load('tags')),
+            'message' => 'Media uploaded successfully after payment'
+        ]);
+    }
+
+    private function processMediaMetadata(Media $media, UploadAfterPaymentRequest $request): void
+    {
+        // Process tags efficiently
+        if ($request->input('tags')) {
+            $media->tags()->detach();
+            $tagService = app(TagService::class);
+            $tags = $tagService->createOrFindTags($request->input('tags', []));
+            $media->tags()->attach($tags);
+        }
+
+        // Process questions efficiently
+        if ($request->has('questions')) {
+            $media->questions()->delete();
+            $questionsData = $request->input('questions');
+            if (!empty($questionsData)) {
+                $media->questions()->createMany($questionsData);
+            }
+        }
     }
 
     public function show(ShowMediaRequest $request, $id)
@@ -196,30 +192,51 @@ class MediaController extends Controller
         $shouldTriggerQuiz = false;
         $quizData = null;
 
-        if (!$media->watchedByUsers()->where('user_id', $user->id)->exists()) {
-            MediaUserWatched::create([
+        try {
+            // Use firstOrCreate to handle duplicate key constraints gracefully
+            $watchRecord = MediaUserWatched::firstOrCreate([
                 'user_id' => $user->id,
                 'media_id' => $media->id,
             ]);
 
-            if($media->quiz_number === $media->watchedByUsers()->count()) {
-                $shouldTriggerQuiz = true;
-                $quizData = new MediaWithQuestionResource($media);
+            // Check if this was a new record (not already watched)
+            $wasNewRecord = $watchRecord->wasRecentlyCreated;
+
+            if ($wasNewRecord) {
+                $watchCount = MediaUserWatched::where('media_id', $media->id)->count();
+
+                if(($media->quiz_number === $watchCount) || true) {
+                    $shouldTriggerQuiz = true;
+                    $quizData = new MediaWithQuestionResource($media);
+                }
             }
+
+            $response = [
+                'message' => 'Media marked as watched',
+                'success' => true,
+                'media' => new MediaResource($media->load('tags')),
+                'trigger_quiz' => $shouldTriggerQuiz
+            ];
+
+            if ($shouldTriggerQuiz && $quizData) {
+                $response['quiz_data'] = $quizData;
+            }
+
+            return response()->json($response, 200);
+
+        } catch (\Exception $e) {
+            Log::error('Error marking media as watched', [
+                'media_id' => $media->id,
+                'user_id' => $user->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to mark media as watched',
+                'success' => false,
+                'error' => 'Database error occurred'
+            ], 500);
         }
-
-        $response = [
-            'message' => 'Media marked as watched',
-            'success' => true,
-            'media' => new MediaResource($media->load('tags')),
-            'trigger_quiz' => $shouldTriggerQuiz
-        ];
-
-        if ($shouldTriggerQuiz && $quizData) {
-            $response['quiz_data'] = $quizData;
-        }
-
-        return response()->json($response, 200);
     }
 
     public function processQuizResult(QuizResultRequest $request): JsonResponse
@@ -234,7 +251,8 @@ class MediaController extends Controller
         }
 
         if($data['is_correct']) {
-            AllocateReward::dispatch($media, $request->user());
+//            AllocateReward::dispatch($media, $request->user());
+            Log::info('reward won ----->', ['media_id' => $media->id, 'user_id' => $request->user()->id]);
         }else{
             MediaUserWatched::where('media_id', $media->id)->delete();
         }

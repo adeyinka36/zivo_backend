@@ -28,6 +28,7 @@ class Media extends Model
         'stripe_payment_intent_id',
         'paid_at',
         'amount_paid',
+        'thumbnail',
         'quiz_played',
         'quiz_number'
     ];
@@ -106,5 +107,45 @@ class Media extends Model
         }
 
         return null;
+    }
+
+    public function getThumbnailUrl(): ?string
+    {
+        if (!$this->thumbnail) {
+            return null;
+        }
+
+        if (config('app.env') === 'testing') {
+            return Storage::disk('public')->url($this->thumbnail);
+        }
+
+        if ($this->disk === 's3') {
+            try {
+                return Storage::disk('s3')->temporaryUrl($this->thumbnail, now()->addHour());
+            } catch (\Exception $e) {
+                return Storage::disk('s3')->url($this->thumbnail);
+            }
+        }
+
+        if ($this->disk === 'public') {
+            return Storage::disk('public')->url($this->thumbnail);
+        }
+
+        return null;
+    }
+
+    public function getMediaTypeAttribute(): string
+    {
+        $mimeType = $this->mime_type;
+
+        if (str_starts_with($mimeType, 'video/')) {
+            return 'video';
+        }
+
+        if (str_starts_with($mimeType, 'image/')) {
+            return 'image';
+        }
+
+        return 'other';
     }
 }

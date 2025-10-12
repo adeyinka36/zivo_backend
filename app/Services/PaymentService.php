@@ -31,12 +31,29 @@ class PaymentService
                 ->first();
 
             if ($existingPayment) {
-                // Return existing payment intent
-                return [
-                    'client_secret' => $this->getClientSecret($existingPayment->stripe_payment_intent_id),
-                    'payment_id' => $existingPayment->id,
-                    'existing' => true,
-                ];
+                // Check if the PaymentIntent has already succeeded in Stripe
+                try {
+                    $stripePaymentIntent = $this->stripe->paymentIntents->retrieve($existingPayment->stripe_payment_intent_id);
+                    
+                    if ($stripePaymentIntent->status === 'succeeded') {
+                        // Payment already succeeded, don't return the client_secret
+                        throw new \Exception('Payment has already been completed for this media.');
+                    }
+                    
+                    // Return existing payment intent only if it's still pending
+                    return [
+                        'client_secret' => $this->getClientSecret($existingPayment->stripe_payment_intent_id),
+                        'payment_id' => $existingPayment->id,
+                        'existing' => true,
+                    ];
+                } catch (ApiErrorException $e) {
+                    // If we can't retrieve the PaymentIntent, create a new one
+                    Log::warning('Could not retrieve existing PaymentIntent, creating new one', [
+                        'payment_id' => $existingPayment->id,
+                        'stripe_payment_intent_id' => $existingPayment->stripe_payment_intent_id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
 
             $transactionReference = $this->generateTransactionReference($media->id, $user->id);

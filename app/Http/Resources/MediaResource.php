@@ -12,14 +12,17 @@ class MediaResource extends JsonResource
     {
         /** @var Media $this */
         $user = $request->user();
-        $hasWatched = $this->watchedByUsers()->where('user_id', $user->id)->exists();
+        $hasWatched = $user ? \App\Models\MediaUserWatched::where('media_id', $this->id)
+            ->where('user_id', $user->id)
+            ->exists() : false;
+
 
         return [
             'id' => $this->id,
             'name' => $this->name,
             'file_name' => $this->file_name,
             'mime_type' => $this->mime_type,
-            'media_type' => $this->getMediaType(),
+            'media_type' => $this->media_type,
             'reward' => $this->reward,
             'url' => $this->getFileUrl(),
             'description' => $this->description,
@@ -27,7 +30,7 @@ class MediaResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'has_watched' => $hasWatched,
-            'thumbnail' => $this->thumbnail,
+            'thumbnail' => $this->getThumbnailUrl(),
             'uploader_id' => $this->user_id,
             'uploader_username' => $this->user->username,
             'view_count' => $this->watchedByUsers()->count(),
@@ -42,30 +45,5 @@ class MediaResource extends JsonResource
         ];
     }
 
-    /**
-     * Get the media type based on mime type
-     */
-    protected function getMediaType(): string
-    {
-        $mimeType = $this->mime_type;
-
-        if (str_starts_with($mimeType, 'video/')) {
-            return 'video';
-        }
-
-        if (str_starts_with($mimeType, 'image/')) {
-            return 'image';
-        }
-
-        if (str_starts_with($mimeType, 'application/pdf')) {
-            return 'document';
-        }
-
-        if (str_starts_with($mimeType, 'text/')) {
-            return 'text';
-        }
-
-        return 'other';
-    }
 
 }

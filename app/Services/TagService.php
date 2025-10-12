@@ -19,9 +19,18 @@ class TagService
         $uniqueTags = array_unique($normalizedTags);
 
         return collect($uniqueTags)->map(function($tagName) {
-            return Tag::firstOrCreate([
+            $slug = Str::slug($tagName);
+            
+            // First try to find by slug (since that's the unique constraint)
+            $existingTag = Tag::where('slug', $slug)->first();
+            if ($existingTag) {
+                return $existingTag;
+            }
+            
+            // If not found by slug, create new one
+            return Tag::create([
                 'name' => $tagName,
-                'slug' => Str::slug($tagName)
+                'slug' => $slug
             ]);
         });
     }
