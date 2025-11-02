@@ -11,10 +11,18 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class GenerateThumbnailJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;
+
+    /**
+     * The number of times the job may be attempted.
+     *
+     * @var int
+     */
+    public int $tries = 1;
 
     public function __construct(
         private readonly string $mediaId
@@ -31,7 +39,7 @@ class GenerateThumbnailJob implements ShouldQueue
                 return;
             }
 
-            if ($media->media_type !== 'video') {
+            if (!str_starts_with($media->mime_type, 'video/')) {
                 return;
             }
 
@@ -69,6 +77,21 @@ class GenerateThumbnailJob implements ShouldQueue
         }
     }
 
+    /**
+     * Handle a job failure.
+     */
+    public function failed(Throwable $exception): void
+    {
+        Log::error('GenerateThumbnailJob failed permanently', [
+            'media_id' => $this->mediaId,
+            'error' => $exception->getMessage(),
+            'trace' => $exception->getTraceAsString()
+        ]);
+
+        // Note: We don't update media status here as the media upload was successful
+        // Thumbnail generation failure doesn't affect the core media functionality
+    }
+
     private function getVideoPath(Media $media): ?string
     {
         if ($media->disk === 's3') {
@@ -101,11 +124,4 @@ class GenerateThumbnailJob implements ShouldQueue
         return null;
     }
 
-    public function failed(\Throwable $exception): void
-    {
-        Log::error('Thumbnail generation job permanently failed', [
-            'media_id' => $this->mediaId,
-            'error' => $exception->getMessage()
-        ]);
-    }
 }

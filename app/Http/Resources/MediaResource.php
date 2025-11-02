@@ -8,14 +8,23 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class MediaResource extends JsonResource
 {
+    private static $watchedMediaIds = null;
+    private static $currentUser = null;
+
     public function toArray(Request $request): array
     {
         /** @var Media $this */
         $user = $request->user();
-        $hasWatched = $user ? \App\Models\MediaUserWatched::where('media_id', $this->id)
-            ->where('user_id', $user->id)
-            ->exists() : false;
+        
+        if (self::$currentUser !== $user?->id) {
+            self::$currentUser = $user?->id;
+            self::$watchedMediaIds = $user ? 
+                \App\Models\MediaUserWatched::where('user_id', $user->id)
+                    ->pluck('media_id')
+                    ->toArray() : [];
+        }
 
+        $hasWatched = $user && in_array($this->id, self::$watchedMediaIds);
 
         return [
             'id' => $this->id,
@@ -24,16 +33,16 @@ class MediaResource extends JsonResource
             'mime_type' => $this->mime_type,
             'media_type' => $this->media_type,
             'reward' => $this->reward,
+            'rounds' => $this->rounds,
             'url' => $this->getFileUrl(),
             'description' => $this->description,
-            'tags' => TagResource::collection($this->whenLoaded('tags')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'has_watched' => $hasWatched,
             'thumbnail' => $this->getThumbnailUrl(),
             'uploader_id' => $this->user_id,
-            'uploader_username' => $this->user->username,
-            'view_count' => $this->watchedByUsers()->count(),
+            'uploader_username' => $this->whenLoaded('user', fn() => $this->user->username),
+            'view_count' => $this->whenLoaded('view_count', fn() => $this->view_count),
             'quiz_number' => $this->quiz_number,
         ];
     }

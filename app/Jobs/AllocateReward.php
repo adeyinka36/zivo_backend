@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Media;
 use App\Models\User;
+use App\Notifications\RewardAllocationSuccessNotification;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
@@ -15,6 +16,13 @@ use Illuminate\Support\Facades\Http;
 class AllocateReward implements ShouldQueue
 {
     use Queueable;
+
+    /**
+     * The number of times the job may be attempted.
+     *
+     * @var int
+     */
+    public int $tries = 1;
 
     /**
      * Create a new job instance.
@@ -52,8 +60,8 @@ class AllocateReward implements ShouldQueue
             ],
             'reward' => [
                 'value' => [
-                    'denomination'  => 25,
-//                    'currency_code' => 'USD',
+                    'denomination'  => 1,   //($this->media->reward) /100,
+                    'currency_code' => 'USD',
                 ],
                 'delivery' => [
                     'method' => 'EMAIL',
@@ -63,7 +71,9 @@ class AllocateReward implements ShouldQueue
                     'email' => $winner->email,
                 ],
                 'products' => [
-                    'OKMHM2X2OHYV',
+                    'OKMHM2X2OHYV',  //AMAZON USA
+                    'Q24BD9EZ332JT', //VIRTUAL VISA
+                    'O7VZ5WQOCUQM'  //PAYPAL
                 ],
             ],
         ];
@@ -77,6 +87,9 @@ class AllocateReward implements ShouldQueue
             ->post($endpoint, $payload);
 
         $response->throw();
+
+        $rewardAmountDollars = $this->media->reward / 100;
+        $winner->notify(new RewardAllocationSuccessNotification($rewardAmountDollars));
 
         return $response->json();
     }

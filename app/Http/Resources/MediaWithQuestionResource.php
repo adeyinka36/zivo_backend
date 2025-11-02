@@ -17,13 +17,13 @@ class MediaWithQuestionResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'media_id' => $this->id, // Add media_id field for frontend compatibility
             'name' => $this->name,
             'file_name' => $this->file_name,
             'reward' => $this->reward,
             'url' => $this->getFileUrl(),
             'description' => $this->description,
-            'tags' => TagResource::collection($this->whenLoaded('tags')),
-            'question' => $this->questions() ? new QuestionResource($this->questions()->inRandomOrder()->first()) : null,
+            'question' => $this->questions()->exists() ? new QuestionResource($this->questions()->inRandomOrder()->first()) : null,
             'mime_type' => $this->mime_type,
             'media_type' => $this->getMediaType(),
         ];

@@ -38,9 +38,11 @@ Route::prefix('v1')->group(function () {
         });
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail']);
+        Route::post('/update-email', [AuthController::class, 'updateEmail']);
 
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::put('/profile', [ProfileController::class, 'update']);
+        Route::put('/users/push-token', [ProfileController::class, 'updatePushToken']);
         Route::get('/user/media', [ProfileController::class, 'getUserMedia']);
 
         Route::get('media', [MediaController::class, 'index']);

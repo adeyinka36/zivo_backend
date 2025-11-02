@@ -25,6 +25,10 @@ class MediaUserWatched extends Model
             $model->created_at = now();
             $model->id = (string) Str::uuid();
         });
+
+        static::created(function ($model) {
+            Media::where('id', $model->media_id)->increment('view_count');
+        });
     }
 
     /**

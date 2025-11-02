@@ -10,84 +10,75 @@ use App\Http\Requests\Media\ShowMediaRequest;
 use App\Http\Requests\Media\DeleteMediaRequest;
 use App\Http\Requests\Media\MarkAsWatchedRequest;
 use App\Http\Requests\QuizResultRequest;
+use App\Http\Resources\MarkAsWatchedResponse;
 use App\Http\Resources\MediaResource;
+use App\Http\Resources\MediaListResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
 use App\Jobs\GenerateThumbnailJob;
+use App\Jobs\ProcessMediaUploadJob;
+use App\Jobs\SendPushNotificationJob;
+use App\Services\MediaWatchService;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Collection;
 use App\Models\Media;
 use App\Models\MediaUserWatched;
 use App\Models\Question;
-use App\Models\Tag;
 use App\Models\User;
 use App\Models\Payment;
 use App\Services\MediaService;
 use App\Services\PaymentService;
-use App\Services\TagService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 class MediaController extends Controller
 {
     public function __construct(
-        private readonly MediaService $mediaService
+        private readonly MediaService $mediaService,
+        private readonly PaymentService $paymentService
     ) {}
 
     public function index(ListMediaRequest $request)
     {
-        $query = Media::with('tags')
-            ->orderBy('created_at', 'desc')
-            ->where('size', '>', 0)
-            ->where('quiz_played', false);
-
-        if ($request->filled('search')) {
-            $query = $this->mediaService->searchByTag($request->input('search'));
-        }
-
-        $perPage = $request->input('per_page', 15);
+        $perPage = $request->input('per_page', 20);
         $page = $request->input('page', 1);
-        $media = $query->paginate($perPage, ['*'], 'page', $page);
+        $forceRefresh = $request->input('force_refresh', false);
+        
+        $cacheKey = "media_list_page_{$page}_per_{$perPage}";
+        
+        if ($forceRefresh) {
+            Cache::forget($cacheKey);
+        }
+        
+        $media = Cache::remember($cacheKey, 60, function () use ($perPage, $page) {
+            $query = Media::with(['user'])
+                ->orderBy('created_at', 'desc')
+                ->where('size', '>', 0)
+                ->where('campaign_completed', false)
+                ->where('mime_type', '!=', 'pending');
 
-        return MediaResource::collection($media);
+            return $query->paginate($perPage, ['*'], 'page', $page);
+        });
+
+        return MediaListResource::collection($media);
     }
 
     /**
      * Create payment intent with metadata only (no file upload)
      */
-    public function createPaymentIntent(CreatePaymentIntentRequest $request)
+    public function createPaymentIntent(CreatePaymentIntentRequest $request): JsonResponse
     {
         return DB::transaction(function () use ($request) {
-            // Create a temporary media record with metadata only
-            $media = Media::create([
-                'user_id' => $request->user()->id,
-                'name' => 'Pending Upload',
-                'file_name' => 'pending',
-                'mime_type' => 'pending',
-                'size' => 0,
-                'path' => 'pending',
-                'disk' => 'pending',
-                'description' => $request->input('description'),
-                'reward' => $request->input('reward'),
-                'payment_status' => 'pending',
-            ]);
+            $data = $request->validated();
+            $user = $request->user();
 
-            // Attach tags if provided
-            if ($request->input('tags')) {
-                $tagService = app(TagService::class);
-                $tags = $tagService->createOrFindTags($request->input('tags', []));
-                $media->tags()->attach($tags);
-            }
+            $media = $this->mediaService->createDraftMedia($data, $user);
+            $this->mediaService->createQuestions($media, $data['questions'] ?? []);
 
-            // Create questions if provided
-            if ($request->has('questions')) {
-                foreach ($request->input('questions') as $questionData) {
-                    $media->questions()->create($questionData);
-                }
-            }
-
-            // Create payment intent
-            $paymentService = app(PaymentService::class);
-            $paymentResult = $paymentService->createPaymentIntent($media, $request->user());
+            $paymentResult = $this->paymentService->createPaymentIntent($media, $user);
 
             return response()->json([
                 'payment_intent' => [
@@ -102,139 +93,115 @@ class MediaController extends Controller
     /**
      * Upload media after payment is completed
      */
-    public function uploadAfterPayment(UploadAfterPaymentRequest $request)
+    public function uploadAfterPayment(UploadAfterPaymentRequest $request): JsonResponse
     {
         $payment = Payment::where('id', $request->input('payment_id'))
             ->where('status', Payment::STATUS_SUCCEEDED)
             ->firstOrFail();
 
-        $media = $payment->media;
+        $user = $request->user();
 
-        $uploadedMedia = $this->mediaService->store(
-            $request->file('file'),
-            [
-                'description' => $request->input('description'),
-                'reward' => $request->input('reward'),
-            ],
-            $request->user()->id
+        $media = $payment->media;
+        $file = $request->file('file');
+        
+        $disk = app()->environment('testing') ? 'public' : 's3';
+        $path = $disk === 's3' ? 'zivo_media/' . $file->hashName() : 'media/' . $file->hashName();
+
+        $file->storeAs(
+            $disk === 's3' ? 'zivo_media' : 'media',
+            $file->hashName(),
+            ['disk' => $disk]
         );
 
-        DB::transaction(function () use ($media, $uploadedMedia, $request) {
-            $media->update([
-                'name' => $uploadedMedia->name,
-                'file_name' => $uploadedMedia->file_name,
-                'mime_type' => $uploadedMedia->mime_type,
-                'size' => $uploadedMedia->size,
-                'path' => $uploadedMedia->path,
-                'disk' => $uploadedMedia->disk,
-                'description' => $request->input('description'),
-                'reward' => $request->input('reward'),
-                'payment_status' => 'paid',
-                'paid_at' => now(),
-                'amount_paid' => $request->input('reward'),
-                'quiz_number' => $request->input('quiz_number'),
-            ]);
+        $rewardCents = (int) $request->input('reward');
+        $rounds = (int) $request->input('rounds');
+        $rewardAmountCents = $rewardCents * $rounds;
+        $platformFeeCents = (int) round($rewardAmountCents * 0.10);
+        $totalAmountCents = $rewardAmountCents + $platformFeeCents;
 
-            $uploadedMedia->delete();
-        });
+        $metadata = [
+            'name' => $file->getClientOriginalName(),
+            'file_name' => $file->getClientOriginalName(),
+            'mime_type' => $file->getMimeType(),
+            'size' => $file->getSize(),
+            'description' => $request->input('description'),
+            'reward' => $rewardCents,
+            'rounds' => $rounds,
+            'amount_paid' => $totalAmountCents / 100,
+            'quiz_number' => (int) $request->input('quiz_number', 1),
+        ];
 
-        $this->processMediaMetadata($media, $request);
+        $jobs = collect([
+            new ProcessMediaUploadJob($media->id, $path, $disk, $metadata, $request->input('questions', []))
+        ]);
 
-        // Dispatch thumbnail generation job asynchronously
-        if ($media->media_type === 'video') {
-            GenerateThumbnailJob::dispatch($media->id);
+        if (str_starts_with($metadata['mime_type'], 'video/')) {
+            $jobs->push(new GenerateThumbnailJob($media->id));
         }
+
+        $jobs->push(new SendPushNotificationJob($user->id, $media->id));
+
+        Bus::chain($jobs)
+            ->catch( function (Throwable $e) {
+                Log::error($e);
+            })->dispatch();
 
         return response()->json([
-            'media' => new MediaResource($media->load('tags')),
-            'message' => 'Media uploaded successfully after payment'
+            'message' => 'Media upload initiated successfully'
         ]);
-    }
-
-    private function processMediaMetadata(Media $media, UploadAfterPaymentRequest $request): void
-    {
-        // Process tags efficiently
-        if ($request->input('tags')) {
-            $media->tags()->detach();
-            $tagService = app(TagService::class);
-            $tags = $tagService->createOrFindTags($request->input('tags', []));
-            $media->tags()->attach($tags);
-        }
-
-        // Process questions efficiently
-        if ($request->has('questions')) {
-            $media->questions()->delete();
-            $questionsData = $request->input('questions');
-            if (!empty($questionsData)) {
-                $media->questions()->createMany($questionsData);
-            }
-        }
     }
 
     public function show(ShowMediaRequest $request, $id)
     {
-        $media = Media::with('tags')->findOrFail($id);
+        $media = Media::findOrFail($id);
         return new MediaResource($media);
     }
 
     public function destroy(DeleteMediaRequest $request, $id)
     {
         $media = Media::findOrFail($id);
-
-        // Use MediaService delete method which handles both S3 and database cleanup
         $this->mediaService->delete($media);
 
         return response()->json(['message' => 'Media deleted successfully']);
     }
 
-    public function markAsWatched(Media $media, User $user, MarkAsWatchedRequest $request): JsonResponse
-    {
-        $shouldTriggerQuiz = false;
-        $quizData = null;
-
+    /**
+     * Mark media as watched.
+     *
+     * @param Media $media
+     * @param User $user
+     * @param MarkAsWatchedRequest $request
+     * @return JsonResponse
+     */
+    public function markAsWatched(
+        Media $media,
+        User $user,
+        MediaWatchService $watchService
+    ): JsonResponse {
         try {
-            // Use firstOrCreate to handle duplicate key constraints gracefully
-            $watchRecord = MediaUserWatched::firstOrCreate([
-                'user_id' => $user->id,
-                'media_id' => $media->id,
-            ]);
+            $result = $watchService->markAsWatched($media, $user);
 
-            // Check if this was a new record (not already watched)
-            $wasNewRecord = $watchRecord->wasRecentlyCreated;
-
-            if ($wasNewRecord) {
-                $watchCount = MediaUserWatched::where('media_id', $media->id)->count();
-
-                if(($media->quiz_number === $watchCount) || true) {
-                    $shouldTriggerQuiz = true;
-                    $quizData = new MediaWithQuestionResource($media);
-                }
-            }
-
-            $response = [
-                'message' => 'Media marked as watched',
-                'success' => true,
-                'media' => new MediaResource($media->load('tags')),
-                'trigger_quiz' => $shouldTriggerQuiz
+            $responseData = [
+                'media' => $media,
+                'trigger_quiz' => $result['trigger_quiz'],
+                'email_verified' => $result['email_verified'],
+                'watch_recorded' => $result['watch_recorded'],
+                'quiz_data' => $result['quiz_data'],
             ];
 
-            if ($shouldTriggerQuiz && $quizData) {
-                $response['quiz_data'] = $quizData;
-            }
-
-            return response()->json($response, 200);
-
+            return response()->json(new MarkAsWatchedResponse($responseData), 200);
         } catch (\Exception $e) {
             Log::error('Error marking media as watched', [
                 'media_id' => $media->id,
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'message' => 'Failed to mark media as watched',
                 'success' => false,
-                'error' => 'Database error occurred'
+                'error' => 'Database error occurred',
             ], 500);
         }
     }
@@ -242,24 +209,50 @@ class MediaController extends Controller
     public function processQuizResult(QuizResultRequest $request): JsonResponse
     {
         $data = $request->validated();
-
-        // Find the question by ID
-        $media = $data['media_id'] ? Media::find($data['media_id']) : null;
+        $media = Media::find($data['media_id']);
 
         if (!$media) {
             return response()->json(['message' => 'Media not found'], 404);
         }
 
-        if($data['is_correct']) {
-//            AllocateReward::dispatch($media, $request->user());
-            Log::info('reward won ----->', ['media_id' => $media->id, 'user_id' => $request->user()->id]);
-        }else{
-            MediaUserWatched::where('media_id', $media->id)->delete();
+        $question = $media->questions()->first();
+        if (!$question) {
+            return response()->json(['message' => 'Question not found'], 404);
+        }
+
+        $userAnswer = strtolower(trim($data['answer']));
+        $correctAnswer = strtolower(trim($question->answer));
+        
+        similar_text($userAnswer, $correctAnswer, $similarity);
+        $isCorrect = $similarity >= 80;
+
+        if ($isCorrect) {
+            AllocateReward::dispatch($media, $request->user());
+            Log::info('Quiz answered correctly', [
+                'media_id' => $media->id, 
+                'user_id' => $request->user()->id,
+                'user_answer' => $userAnswer,
+                'correct_answer' => $correctAnswer,
+                'similarity' => $similarity
+            ]);
+        } else {
+            MediaUserWatched::where('media_id', $media->id)
+                ->where('user_id', $request->user()->id)
+                ->delete();
+            
+            Log::info('Quiz answered incorrectly', [
+                'media_id' => $media->id, 
+                'user_id' => $request->user()->id,
+                'user_answer' => $userAnswer,
+                'correct_answer' => $correctAnswer,
+                'similarity' => $similarity
+            ]);
         }
 
         return response()->json([
             'message' => 'Quiz result processed successfully',
-            'is_correct' => $data['is_correct'],
+            'is_correct' => $isCorrect,
+            'similarity' => round($similarity, 2)
         ], 200);
     }
 }

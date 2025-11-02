@@ -27,7 +27,8 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
         'username',
         'email',
         'password',
-        'push_token'
+        'push_token',
+        'push_notifications'
     ];
 
     /**
@@ -48,6 +49,7 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'push_notifications' => 'boolean',
     ];
 
     /**

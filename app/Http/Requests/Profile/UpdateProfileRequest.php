@@ -20,6 +20,10 @@ class UpdateProfileRequest extends FormRequest
                 'max:255',
                 'min:2',
             ],
+            'push_notifications' => [
+                'sometimes',
+                'boolean',
+            ],
         ];
     }
 
@@ -29,6 +33,7 @@ class UpdateProfileRequest extends FormRequest
             'name.string' => 'Name must be a string.',
             'name.max' => 'Name cannot exceed 255 characters.',
             'name.min' => 'Name must be at least 2 characters.',
+            'push_notifications.boolean' => 'Push notifications must be true or false.',
         ];
     }
 

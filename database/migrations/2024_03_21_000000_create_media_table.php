@@ -23,6 +23,7 @@ return new class extends Migration
             $table->boolean('has_reward')->default(true);
             $table->boolean('quiz_played')->default(false);
             $table->integer('quiz_number')->default(19);
+            $table->boolean('active')->default(false);
 
             $table->timestamps();
         });

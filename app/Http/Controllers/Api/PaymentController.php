@@ -24,7 +24,6 @@ class PaymentController extends Controller
         $payload = $request->getContent();
         $signature = $request->header('Stripe-Signature');
 
-        // Validate webhook signature
         if (!$this->paymentService->validateWebhookSignature($payload, $signature)) {
             Log::error('Invalid webhook signature');
             return response()->json(['error' => 'Invalid signature'], 400);

@@ -85,6 +85,7 @@ class MediaFactory extends Factory
             'disk' => 'url',
             'description' => $this->faker->sentence(),
             'reward' => $this->faker->numberBetween(100, 100000),
+            'rounds' => $this->faker->numberBetween(1, 5),
         ];
     }
 }

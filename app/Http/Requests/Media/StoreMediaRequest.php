@@ -37,8 +37,6 @@ class StoreMediaRequest extends FormRequest
                 'mimes:' . implode(',', $allFormats)
             ],
             'description' => 'nullable|string|max:1000',
-            'tags' => 'nullable|array|max:10',
-            'tags.*' => 'string|max:255|regex:/^[a-zA-Z0-9\s\-_#]+$/',
             'reward' => 'nullable|integer|min:100|max:100000000000',
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:1000',
@@ -60,9 +58,6 @@ class StoreMediaRequest extends FormRequest
             
             'description.max' => 'Description cannot exceed 1000 characters.',
             
-            'tags.max' => 'You can add at most 10 tags.',
-            'tags.*.max' => 'Each tag cannot exceed 255 characters.',
-            'tags.*.regex' => 'Tags can only contain letters, numbers, spaces, hyphens, underscores, and hashtags.',
             
             'reward.min' => 'Reward must be at least $1.00 (100 cents).',
             'reward.max' => 'Reward amount is too large.',

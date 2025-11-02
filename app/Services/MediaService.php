@@ -10,12 +10,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
-use App\Models\Tag;
 
 class MediaService
 {
     public function __construct(
-        private readonly TagService $tagService,
         private readonly ThumbnailService $thumbnailService
     ) {}
 
@@ -48,18 +46,10 @@ class MediaService
             'disk' => $disk,
             'description' => $metadata['description'] ?? null,
             'reward' => $metadata['reward'] ?? 100,
+            'rounds' => $metadata['rounds'] ?? 1,
         ]);
 
 
-        if (isset($metadata['tags']) && is_array($metadata['tags'])) {
-            foreach ($metadata['tags'] as $tagName) {
-                $tag = Tag::firstOrCreate(
-                    ['name' => $tagName],
-                    ['slug' => Str::slug($tagName)]
-                );
-                $media->tags()->attach($tag);
-            }
-        }
 
         return $media;
     }
@@ -124,17 +114,9 @@ class MediaService
             ]);
         }
 
-        $media->tags()->detach();
         return $media->delete();
     }
 
-    public function searchByTag(string $searchTerm)
-    {
-        return Media::with('tags')->whereHas('tags', function ($query) use ($searchTerm) {
-            $query->where('name', 'like', "%{$searchTerm}%")
-                  ->orWhere('slug', 'like', "%{$searchTerm}%");
-        });
-    }
 
     private function isVideoFile(UploadedFile $file): bool
     {
@@ -149,5 +131,44 @@ class MediaService
         ];
         
         return in_array($file->getMimeType(), $videoMimeTypes);
+    }
+
+    /**
+     * Create a draft media record with metadata only
+     */
+    public function createDraftMedia(array $data, User $user): Media
+    {
+        return Media::create([
+            'user_id' => $user->id,
+            'name' => 'Pending Upload',
+            'file_name' => 'pending',
+            'mime_type' => 'pending',
+            'size' => 0,
+            'path' => 'pending',
+            'disk' => 'pending',
+            'description' => $data['description'] ?? null,
+            'reward' => $data['reward'],
+            'rounds' => $data['rounds'],
+            'quiz_number' => $data['quiz_number'] ?? 1,
+            'payment_status' => 'pending',
+        ]);
+    }
+
+
+    /**
+     * Create questions for media
+     */
+    public function createQuestions(Media $media, array $questions): void
+    {
+        if (empty($questions)) {
+            return;
+        }
+
+        foreach ($questions as $questionData) {
+            $media->questions()->create([
+                'question' => $questionData['question'],
+                'answer' => $questionData['answer'],
+            ]);
+        }
     }
 }

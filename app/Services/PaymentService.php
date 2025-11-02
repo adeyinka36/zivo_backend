@@ -25,29 +25,24 @@ class PaymentService
     public function createPaymentIntent(Media $media, User $user): array
     {
         return DB::transaction(function () use ($media, $user) {
-            // Check if payment already exists
             $existingPayment = $this->paymentRepository->findByMediaId($media->id)
                 ->where('status', Payment::STATUS_PENDING)
                 ->first();
 
             if ($existingPayment) {
-                // Check if the PaymentIntent has already succeeded in Stripe
                 try {
                     $stripePaymentIntent = $this->stripe->paymentIntents->retrieve($existingPayment->stripe_payment_intent_id);
                     
                     if ($stripePaymentIntent->status === 'succeeded') {
-                        // Payment already succeeded, don't return the client_secret
                         throw new \Exception('Payment has already been completed for this media.');
                     }
-                    
-                    // Return existing payment intent only if it's still pending
+
                     return [
                         'client_secret' => $this->getClientSecret($existingPayment->stripe_payment_intent_id),
                         'payment_id' => $existingPayment->id,
                         'existing' => true,
                     ];
                 } catch (ApiErrorException $e) {
-                    // If we can't retrieve the PaymentIntent, create a new one
                     Log::warning('Could not retrieve existing PaymentIntent, creating new one', [
                         'payment_id' => $existingPayment->id,
                         'stripe_payment_intent_id' => $existingPayment->stripe_payment_intent_id,
@@ -60,8 +55,14 @@ class PaymentService
 
             try {
                 // Create Stripe PaymentIntent
+                // media->reward is stored in cents from the client
+                // Platform fee: 10% of reward per round
+                $rewardAmountCents = (int) $media->reward * (int) $media->rounds;
+                $platformFeeCents = (int) round($rewardAmountCents * 0.10);
+                $totalAmountCents = $rewardAmountCents + $platformFeeCents;
+                
                 $paymentIntent = $this->stripe->paymentIntents->create([
-                    'amount' => (int) ($media->reward * 100), // Convert to cents
+                    'amount' => (int) $totalAmountCents,
                     'currency' => config('stripe.currency'),
                     'metadata' => [
                         'media_id' => $media->id,
@@ -137,12 +138,7 @@ class PaymentService
                     'gateway_response' => $stripePaymentIntent->toArray(),
                 ]);
 
-                // Update media payment status
-                $payment->media->update([
-                    'payment_status' => 'paid',
-                    'paid_at' => now(),
-                    'amount_paid' => $payment->amount,
-                ]);
+                // Payment status will be updated by ProcessMediaUploadJob
 
                 $this->paymentLogger->logPaymentSuccess($payment, $stripePaymentIntent->toArray());
 

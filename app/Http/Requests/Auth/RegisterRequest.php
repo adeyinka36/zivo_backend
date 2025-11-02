@@ -3,12 +3,14 @@
 namespace App\Http\Requests\Auth;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 
 class RegisterRequest extends FormRequest
 {
     public function authorize(): bool
     {
+        Log::info('----->',request()->all());
         return true;
     }
 
@@ -17,7 +19,7 @@ class RegisterRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'max:255', 'unique:users,username'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'string', 'email:rfc,dns', 'max:255', 'unique:users,email', 'indisposable'],
             'password' => [
                 'required',
                 'confirmed',
@@ -43,6 +45,8 @@ class RegisterRequest extends FormRequest
             'email.email' => 'Please enter a valid email address.',
             'email.unique' => 'This email is already registered.',
             'email.max' => 'Email cannot exceed 255 characters.',
+            'email.indisposable' => 'Please enter a valid email address.',
+            'email' => 'Please enter a valid email address.',
             
             'password.required' => 'Please enter a password.',
             'password.confirmed' => 'Password confirmation does not match.',

@@ -32,6 +32,7 @@ class UserSeeder extends Seeder
                 'email_verified_at' => now(),
                 'password' => Hash::make('Secret19'),
                 'remember_token' => 'secret',
+                'push_notifications' => true,
             ]
         );
 
@@ -44,6 +45,7 @@ class UserSeeder extends Seeder
                 'email_verified_at' => now(),
                 'password' => Hash::make('Secret19'),
                 'remember_token' => 'secret',
+                'push_notifications' => true,
             ]
         );
     }

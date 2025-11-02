@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use App\Models\MediaUserWatched;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 class Media extends Model
 {
@@ -24,18 +26,24 @@ class Media extends Model
         'disk',
         'description',
         'reward',
+        'rounds',
         'payment_status',
         'stripe_payment_intent_id',
         'paid_at',
         'amount_paid',
         'thumbnail',
         'quiz_played',
-        'quiz_number'
+        'quiz_number',
+        'view_count',
+        'active',
+        'rounds_completed',
+        'campaign_completed',
     ];
 
     protected $casts = [
         'size' => 'integer',
         'reward' => 'integer',
+        'rounds' => 'integer',
         'amount_paid' => 'decimal:2',
         'paid_at' => 'datetime'
     ];
@@ -45,10 +53,6 @@ class Media extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function tags(): BelongsToMany
-    {
-        return $this->belongsToMany(Tag::class);
-    }
 
     public function questions(): HasMany
     {
@@ -64,6 +68,52 @@ class Media extends Model
     {
         return $this->belongsToMany(User::class, 'media_users_watched', 'media_id', 'user_id')
             ->where('media_users_watched.user_id', '!=', $this->user_id);
+    }
+
+    public function watches(): HasMany
+    {
+        return $this->hasMany(MediaUserWatched::class);
+    }
+
+    public function getWatchCount(): int
+    {
+        return $this->watches()->count();
+    }
+
+    public function hasQuestion(): bool
+    {
+        return $this->questions()->exists();
+    }
+
+    public function shouldTriggerQuiz(int $watchCount): bool
+    {
+        return $this->hasQuestion() && $this->quiz_number === $watchCount;
+    }
+
+    public function getWatchesPerRound(): int
+    {
+        return 100;
+    }
+
+    public function isRoundComplete(int $watchCount): bool
+    {
+        return $watchCount >= $this->getWatchesPerRound();
+    }
+
+    public function incrementRound(): void
+    {
+        $this->increment('rounds_completed');
+        $this->refresh();
+    }
+
+    public function isCampaignComplete(): bool
+    {
+        return $this->rounds_completed >= $this->rounds;
+    }
+
+    public function completeCampaign(): void
+    {
+        $this->update(['campaign_completed' => true]);
     }
 
     public function getRouteKeyName()
@@ -92,13 +142,15 @@ class Media extends Model
 
         // For S3 storage
         if ($this->disk === 's3') {
-            try {
-                // Try to get a temporary URL (valid for 1 hour)
-                return Storage::disk('s3')->temporaryUrl($this->path, now()->addHour());
-            } catch (\Exception $e) {
-                // Fallback to regular URL if temporaryUrl fails
-                return Storage::disk('s3')->url($this->path);
-            }
+            $cacheKey = 'media_url_' . $this->id . '_' . md5($this->path);
+            
+            return Cache::remember($cacheKey, 3600, function () {
+                try {
+                    return Storage::disk('s3')->temporaryUrl($this->path, now()->addHours(24));
+                } catch (\Exception $e) {
+                    return Storage::disk('s3')->url($this->path);
+                }
+            });
         }
 
         // For local public storage
@@ -120,11 +172,15 @@ class Media extends Model
         }
 
         if ($this->disk === 's3') {
-            try {
-                return Storage::disk('s3')->temporaryUrl($this->thumbnail, now()->addHour());
-            } catch (\Exception $e) {
-                return Storage::disk('s3')->url($this->thumbnail);
-            }
+            $cacheKey = 'media_thumbnail_' . $this->id . '_' . md5($this->thumbnail);
+            
+            return Cache::remember($cacheKey, 3600, function () {
+                try {
+                    return Storage::disk('s3')->temporaryUrl($this->thumbnail, now()->addHours(24));
+                } catch (\Exception $e) {
+                    return Storage::disk('s3')->url($this->thumbnail);
+                }
+            });
         }
 
         if ($this->disk === 'public') {
@@ -137,6 +193,10 @@ class Media extends Model
     public function getMediaTypeAttribute(): string
     {
         $mimeType = $this->mime_type;
+
+        if (!$mimeType) {
+            return 'other';
+        }
 
         if (str_starts_with($mimeType, 'video/')) {
             return 'video';

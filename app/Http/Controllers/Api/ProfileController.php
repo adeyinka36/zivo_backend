@@ -51,4 +51,18 @@ class ProfileController extends Controller
             ],
         ]);
     }
+
+    public function updatePushToken(Request $request): JsonResponse
+    {
+        $request->validate([
+            'push_token' => 'required|string|max:255',
+        ]);
+
+        $user = $request->user();
+        $user->update(['push_token' => $request->push_token]);
+
+        return response()->json([
+            'message' => 'Push token updated successfully',
+        ]);
+    }
 } 

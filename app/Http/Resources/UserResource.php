@@ -21,6 +21,7 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'zivos' => $this->zivos ?: 0,
             'email_verified_at' => $this->email_verified_at,
+            'push_notifications' => $this->push_notifications,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

@@ -7,7 +7,9 @@ use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Http\Requests\Auth\UpdateEmailRequest;
 use App\Services\Auth\AuthService;
+use App\Services\NotificationService;
 use App\DTOs\Auth\RegisterUserDTO;
 use App\DTOs\Auth\LoginCredentialsDTO;
 use App\DTOs\Auth\PasswordResetDTO;
@@ -17,6 +19,7 @@ use App\Exceptions\Auth\InvalidCredentialsException;
 use App\Exceptions\Auth\RegistrationFailedException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -25,7 +28,8 @@ use Illuminate\Validation\Rules;
 class AuthController extends Controller
 {
     public function __construct(
-        private AuthService $authService
+        private AuthService $authService,
+        private NotificationService $notificationService
     ) {}
 
     public function register(RegisterRequest $request): JsonResponse
@@ -116,8 +120,44 @@ class AuthController extends Controller
 
         if ($user->markEmailAsVerified()) {
             event(new \Illuminate\Auth\Events\Verified($user));
+            
+            if ($user->push_notifications && $user->push_token) {
+                $this->notificationService->sendEmailVerificationSuccess($user);
+            }
         }
 
         return SuccessResponse::make('Email verified successfully');
+    }
+
+    public function resendVerificationEmail(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->hasVerifiedEmail()) {
+            return ErrorResponse::make('Email already verified', 400);
+        }
+
+        $user->sendEmailVerificationNotification();
+
+        return SuccessResponse::make('Verification email sent successfully');
+    }
+
+    public function updateEmail(UpdateEmailRequest $request): JsonResponse
+    {
+        $user = $request->user();
+        $newEmail = $request->validated()['email'];
+
+        if ($user->email === $newEmail) {
+            return ErrorResponse::make('New email must be different from current email', 400);
+        }
+
+        $user->update([
+            'email' => $newEmail,
+            'email_verified_at' => null
+        ]);
+
+        $user->sendEmailVerificationNotification();
+
+        return SuccessResponse::make('Email updated successfully. Please check your new email for verification.');
     }
 }

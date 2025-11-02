@@ -6,6 +6,7 @@ use App\DTOs\Auth\AuthResponseDTO;
 use App\DTOs\Auth\LoginCredentialsDTO;
 use App\DTOs\Auth\RegisterUserDTO;
 use App\DTOs\Auth\PasswordResetDTO;
+use App\Models\User;
 use App\Repositories\Contracts\AuthRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Exceptions\Auth\InvalidCredentialsException;

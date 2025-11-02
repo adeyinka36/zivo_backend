@@ -24,6 +24,7 @@ return new class extends Migration
             $table->string('payment_method')->nullable(); // 'card', 'apple_pay', 'google_pay'
             $table->json('gateway_response')->nullable(); // Store full Stripe response
             $table->text('failure_reason')->nullable();
+            $table->boolean('media_uploaded')->default(false); //to be used to determine if a upload was success after payment is taken
             $table->timestamp('paid_at')->nullable();
             $table->timestamps();
             $table->softDeletes();

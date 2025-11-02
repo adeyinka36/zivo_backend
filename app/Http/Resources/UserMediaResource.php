@@ -18,13 +18,6 @@ class UserMediaResource extends JsonResource
             'reward' => $this->reward,
             'url' => $this->getFileUrl(),
             'description' => $this->description,
-            'tags' => $this->tags->map(function ($tag) {
-                return [
-                    'id' => $tag->id,
-                    'name' => $tag->name,
-                    'slug' => $tag->slug,
-                ];
-            }),
             'created_at' => $this->created_at->toISOString(),
             'updated_at' => $this->updated_at->toISOString(),
             'has_watched' => $this->getHasWatchedAttribute(),
