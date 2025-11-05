@@ -38,6 +38,10 @@ return [
     'tremendous' => [
         'api_key' => env('TREMENDOUUS_API_KEY'),
         'api_endpoint' => env('TREMENDOUUS_API_ENDPOINT'),
+    ],
+
+    'media' => [
+        'target_views' => env('MEDIA_TARGET_VIEWS'),
     ]
 
 ];

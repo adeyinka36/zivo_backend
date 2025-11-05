@@ -74,6 +74,20 @@ class UploadAfterPaymentRequest extends FormRequest
 
                 if ($payment->media->user_id !== $this->user()->id) {
                     $validator->errors()->add('payment_id', 'You do not have permission to upload media for this payment.');
+                    return;
+                }
+
+                // Verify frontend amounts match Media record (security check)
+                $media = $payment->media;
+                $frontendReward = (int) $this->input('reward');
+                $frontendRounds = (int) $this->input('rounds');
+
+                if ($frontendReward !== (int) $media->reward) {
+                    $validator->errors()->add('reward', 'Reward amount does not match the payment record. Please refresh and try again.');
+                }
+
+                if ($frontendRounds !== (int) $media->rounds) {
+                    $validator->errors()->add('rounds', 'Rounds value does not match the payment record. Please refresh and try again.');
                 }
             }
         });

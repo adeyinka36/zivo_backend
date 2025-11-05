@@ -7,7 +7,7 @@ use App\Models\User;
 use App\Models\MediaUserWatched;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateRewardWithAmount;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -107,23 +107,20 @@ class MediaWatchService
         if (!$media->isRoundComplete($watchCount)) {
             return;
         }
-
-        $media->incrementRound();
-
-        if ($media->isCampaignComplete()) {
-            $media->completeCampaign();
-        }
-
         $watchers = $this->getWatchersForMedia($media);
-        
-        if ($watchers->isNotEmpty()) {
+
+        if ($watchers->isNotEmpty() && count($watchers) > config('services.media.target_views') && !$media->prize_won) {
             $this->allocateRewardsForUnwonRound($media, $watchers);
         }
 
         if (!$media->isCampaignComplete()) {
+            $media->incrementRound();
             $this->resetWatchesForRound($media);
         }
 
+        if ($media->isCampaignComplete()) {
+            $media->completeCampaign();
+        }
     }
 
     /**
@@ -146,37 +143,61 @@ class MediaWatchService
      */
     public function allocateRewardsForUnwonRound(Media $media,Collection $watchers): void
     {
+
+        //throw error if reward less than 100?
+
         $reward = $media->reward;
-        $numberOfPeopleInRound = 100;
+        $numberOfPeopleInRound = config('services.media.target_views');
+        $winnersCount = 0;
+        $winningAmount = 0;
 
         if ($reward == 100) {
             $winnersCount = 1;
             $winningAmount = 100;
-        } elseif ($reward >= 10000) {
-            $reward -= $reward % 10000;
-            $winningAmount = (int) ($reward / 100);
+        } elseif ($reward >= (config('services.media.target_views') * 100)) {
+            $reward -= ($reward % config('services.media.target_views') * 100);
+            $winningAmount = (int) ($reward / config('services.media.target_views'));
             $winnersCount = $numberOfPeopleInRound;
-        } elseif ($reward >= 100) {
+        } elseif ($reward > 100) {
             $reward -= $reward % 100;
-            $winnersCount = (int) ($reward / 100);
+            $split = (int) $reward/100;
+            $winnersCount = $split < config('services.media.target_views') ? $split : config('services.media.target_views');
             $winningAmount = 100;
-        } else {
-            return;
         }
 
         $availableWatchers = $watchers->count();
         
-        if ($availableWatchers === 0) {
-            Log::warning('No watchers available for reward allocation', [
+        if ($availableWatchers === 0 || !$winnersCount || !$winningAmount) {
+            Log::warning('No reward allocated for this unwon round something is wrong!', [
                 'media_id' => $media->id,
+                'reward' => $reward,
+                'winners' => $availableWatchers,
+                'winning_amount' => $winningAmount,
+                'winners_count' => $winnersCount,
             ]);
             return;
         }
 
         $selectedWinners = $watchers->random($winnersCount);
+        $totalPaymentMade = 0;
 
         foreach ($selectedWinners as $winner) {
-            AllocateRewardWithAmount::dispatch($winner, $winningAmount);
+            if($winner->email_verified_at) {
+                $totalPaymentMade += $winningAmount;
+                if($totalPaymentMade > $reward){
+                    Log::info('Amount being paid is more than reward',  [
+                        'media_id' => $media->id,
+                        'reward' => $reward,
+                        'winners' => $availableWatchers,
+                        'winning_amount' => $winningAmount,
+                        'winners_count' => $winnersCount,
+                        'total_payment_made' => $totalPaymentMade,
+                    ]);
+                    break;
+                }
+                AllocateRewardWithAmount::dispatch($winner, $winningAmount);
+                sleep(5);
+            }
         }
 
         Log::info('Rewards allocated for unwon round', [

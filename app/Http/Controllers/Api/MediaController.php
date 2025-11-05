@@ -102,6 +102,10 @@ class MediaController extends Controller
         $user = $request->user();
 
         $media = $payment->media;
+        if (!$media) {
+            return response()->json(['error' => 'Media not found'], 404);
+        }
+
         $file = $request->file('file');
         
         $disk = app()->environment('testing') ? 'public' : 's3';
@@ -113,22 +117,36 @@ class MediaController extends Controller
             ['disk' => $disk]
         );
 
-        $rewardCents = (int) $request->input('reward');
-        $rounds = (int) $request->input('rounds');
-        $rewardAmountCents = $rewardCents * $rounds;
-        $platformFeeCents = (int) round($rewardAmountCents * 0.10);
-        $totalAmountCents = $rewardAmountCents + $platformFeeCents;
+        // Calculate amounts from Media record (server-side) - don't trust frontend
+        $expectedAmounts = $this->paymentService->calculateExpectedPaymentAmount($media);
+        $totalAmountCents = $expectedAmounts['total_amount_cents'];
 
+        // Verify frontend amounts match Media record (for validation, but don't use them)
+        $frontendRewardCents = (int) $request->input('reward');
+        $frontendRounds = (int) $request->input('rounds');
+        
+        if ($frontendRewardCents !== (int) $media->reward || $frontendRounds !== (int) $media->rounds) {
+            Log::warning('Frontend amounts mismatch Media record during upload', [
+                'payment_id' => $payment->id,
+                'media_id' => $media->id,
+                'frontend_reward' => $frontendRewardCents,
+                'media_reward' => $media->reward,
+                'frontend_rounds' => $frontendRounds,
+                'media_rounds' => $media->rounds,
+            ]);
+        }
+
+        // Use Media record values (server-side) for metadata
         $metadata = [
             'name' => $file->getClientOriginalName(),
             'file_name' => $file->getClientOriginalName(),
             'mime_type' => $file->getMimeType(),
             'size' => $file->getSize(),
-            'description' => $request->input('description'),
-            'reward' => $rewardCents,
-            'rounds' => $rounds,
+            'description' => $request->input('description') ?? $media->description,
+            'reward' => (int) $media->reward,
+            'rounds' => (int) $media->rounds,
             'amount_paid' => $totalAmountCents / 100,
-            'quiz_number' => (int) $request->input('quiz_number', 1),
+            'quiz_number' => (int) ($request->input('quiz_number') ?? $media->quiz_number ?? 1),
         ];
 
         $jobs = collect([
@@ -214,7 +232,6 @@ class MediaController extends Controller
         if (!$media) {
             return response()->json(['message' => 'Media not found'], 404);
         }
-
         $question = $media->questions()->first();
         if (!$question) {
             return response()->json(['message' => 'Question not found'], 404);
@@ -227,27 +244,19 @@ class MediaController extends Controller
         $isCorrect = $similarity >= 80;
 
         if ($isCorrect) {
+            $media->update(['prize_won']);
             AllocateReward::dispatch($media, $request->user());
-            Log::info('Quiz answered correctly', [
-                'media_id' => $media->id, 
-                'user_id' => $request->user()->id,
-                'user_answer' => $userAnswer,
-                'correct_answer' => $correctAnswer,
-                'similarity' => $similarity
-            ]);
-        } else {
-            MediaUserWatched::where('media_id', $media->id)
-                ->where('user_id', $request->user()->id)
-                ->delete();
-            
-            Log::info('Quiz answered incorrectly', [
-                'media_id' => $media->id, 
-                'user_id' => $request->user()->id,
-                'user_answer' => $userAnswer,
-                'correct_answer' => $correctAnswer,
-                'similarity' => $similarity
-            ]);
         }
+
+        $resultCorrectness = $isCorrect ? 'correct' : 'incorrect';
+
+        Log::info("Quiz answered $resultCorrectness incorrectly", [
+            'media_id' => $media->id,
+            'user_id' => $request->user()->id,
+            'user_answer' => $userAnswer,
+            'correct_answer' => $correctAnswer,
+            'similarity' => $similarity
+        ]);
 
         return response()->json([
             'message' => 'Quiz result processed successfully',

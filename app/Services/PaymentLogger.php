@@ -107,10 +107,21 @@ class PaymentLogger
 
     public function logSecurityEvent(string $event, array $context = []): void
     {
-        Log::warning('Payment security event', [
+        $message = match($event) {
+            'payment_amount_mismatch' => 'Payment amount mismatch detected - potential security breach',
+            'webhook_signature_validation_failed' => 'Webhook signature validation failed - potential security breach',
+            default => 'Payment security event',
+        };
+
+        $logData = [
             'event' => $event,
             'context' => $context,
             'timestamp' => now()->toISOString(),
-        ]);
+        ];
+
+        match($event) {
+            'payment_amount_mismatch', 'webhook_signature_validation_failed' => Log::error($message, $logData),
+            default => Log::warning($message, $logData),
+        };
     }
 } 

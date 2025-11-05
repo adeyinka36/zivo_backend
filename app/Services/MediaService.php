@@ -160,14 +160,17 @@ class MediaService
      */
     public function createQuestions(Media $media, array $questions): void
     {
-        if (empty($questions)) {
-            return;
-        }
-
         foreach ($questions as $questionData) {
             $media->questions()->create([
                 'question' => $questionData['question'],
                 'answer' => $questionData['answer'],
+            ]);
+        }
+
+        if (empty($questions)) {
+            $media->questions()->create([
+                'question' => 'What is this platform?',
+                'answer' => 'Zivo',
             ]);
         }
     }

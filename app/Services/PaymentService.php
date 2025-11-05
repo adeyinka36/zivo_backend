@@ -20,6 +20,25 @@ class PaymentService
     ) {}
 
     /**
+     * Calculate expected payment amount from media record (server-side).
+     *
+     * @param Media $media
+     * @return array{reward_amount_cents: int, platform_fee_cents: int, total_amount_cents: int}
+     */
+    public function calculateExpectedPaymentAmount(Media $media): array
+    {
+        $rewardAmountCents = (int) $media->reward * (int) $media->rounds;
+        $platformFeeCents = (int) round($rewardAmountCents * 0.10);
+        $totalAmountCents = $rewardAmountCents + $platformFeeCents;
+
+        return [
+            'reward_amount_cents' => $rewardAmountCents,
+            'platform_fee_cents' => $platformFeeCents,
+            'total_amount_cents' => $totalAmountCents,
+        ];
+    }
+
+    /**
      * Create a payment intent for media upload
      */
     public function createPaymentIntent(Media $media, User $user): array
@@ -54,20 +73,18 @@ class PaymentService
             $transactionReference = $this->generateTransactionReference($media->id, $user->id);
 
             try {
-                // Create Stripe PaymentIntent
-                // media->reward is stored in cents from the client
-                // Platform fee: 10% of reward per round
-                $rewardAmountCents = (int) $media->reward * (int) $media->rounds;
-                $platformFeeCents = (int) round($rewardAmountCents * 0.10);
-                $totalAmountCents = $rewardAmountCents + $platformFeeCents;
+                // Calculate expected payment amount from Media record (server-side)
+                $expectedAmounts = $this->calculateExpectedPaymentAmount($media);
+                $totalAmountCents = $expectedAmounts['total_amount_cents'];
                 
                 $paymentIntent = $this->stripe->paymentIntents->create([
-                    'amount' => (int) $totalAmountCents,
+                    'amount' => $totalAmountCents,
                     'currency' => config('stripe.currency'),
                     'metadata' => [
                         'media_id' => $media->id,
                         'user_id' => $user->id,
                         'transaction_reference' => $transactionReference,
+                        'expected_amount_cents' => (string) $totalAmountCents,
                     ],
                     'automatic_payment_methods' => [
                         'enabled' => true,
@@ -76,7 +93,7 @@ class PaymentService
                     'idempotency_key' => $this->generateIdempotencyKey($media->id, $user->id),
                 ]);
 
-                // Create payment record
+                // Create payment record with expected amounts
                 $payment = $this->paymentRepository->create([
                     'user_id' => $user->id,
                     'media_id' => $media->id,
@@ -85,12 +102,17 @@ class PaymentService
                     'status' => Payment::STATUS_PENDING,
                     'amount' => $media->reward,
                     'currency' => config('stripe.currency'),
-                    'gateway_response' => $paymentIntent->toArray(),
+                    'gateway_response' => array_merge($paymentIntent->toArray(), [
+                        'expected_amount_cents' => $totalAmountCents,
+                        'expected_reward_amount_cents' => $expectedAmounts['reward_amount_cents'],
+                        'expected_platform_fee_cents' => $expectedAmounts['platform_fee_cents'],
+                    ]),
                 ]);
 
                 $this->paymentLogger->logPaymentAttempt($payment, [
                     'stripe_payment_intent_id' => $paymentIntent->id,
                     'amount_cents' => $paymentIntent->amount,
+                    'expected_amount_cents' => $totalAmountCents,
                 ]);
 
                 return [
@@ -109,6 +131,50 @@ class PaymentService
                 throw new \Exception('Failed to create payment intent: ' . $e->getMessage());
             }
         });
+    }
+
+    /**
+     * Verify payment amount matches expected amount from Media record.
+     *
+     * @param Payment $payment
+     * @param int $actualAmountCents
+     * @return bool
+     */
+    public function verifyPaymentAmount(Payment $payment, int $actualAmountCents): bool
+    {
+        $media = $payment->media;
+        if (!$media) {
+            Log::error('Payment verification failed: Media not found', [
+                'payment_id' => $payment->id,
+            ]);
+            return false;
+        }
+
+        $expectedAmounts = $this->calculateExpectedPaymentAmount($media);
+        $expectedTotalCents = $expectedAmounts['total_amount_cents'];
+
+        if ($actualAmountCents !== $expectedTotalCents) {
+            Log::warning('Payment amount mismatch detected', [
+                'payment_id' => $payment->id,
+                'media_id' => $media->id,
+                'user_id' => $payment->user_id,
+                'expected_amount_cents' => $expectedTotalCents,
+                'actual_amount_cents' => $actualAmountCents,
+                'difference_cents' => $actualAmountCents - $expectedTotalCents,
+                'media_reward' => $media->reward,
+                'media_rounds' => $media->rounds,
+            ]);
+
+            $this->paymentLogger->logSecurityEvent('payment_amount_mismatch', [
+                'payment_id' => $payment->id,
+                'expected_amount_cents' => $expectedTotalCents,
+                'actual_amount_cents' => $actualAmountCents,
+            ]);
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -131,16 +197,35 @@ class PaymentService
             }
             
             if ($stripePaymentIntent->status === 'succeeded') {
+                // Verify payment amount matches expected amount from Media record
+                $actualAmountCents = (int) $stripePaymentIntent->amount;
+                $amountMatches = $this->verifyPaymentAmount($payment, $actualAmountCents);
+
+                if (!$amountMatches) {
+                    // Log security event but don't block payment (user already paid)
+                    // This allows investigation while preventing exploitation
+                    Log::error('Payment amount verification failed - security alert', [
+                        'payment_id' => $payment->id,
+                        'payment_intent_id' => $paymentIntentId,
+                        'actual_amount_cents' => $actualAmountCents,
+                    ]);
+                }
+
                 $payment->update([
                     'status' => Payment::STATUS_SUCCEEDED,
                     'paid_at' => now(),
                     'stripe_charge_id' => $stripePaymentIntent->latest_charge,
-                    'gateway_response' => $stripePaymentIntent->toArray(),
+                    'gateway_response' => array_merge($stripePaymentIntent->toArray(), [
+                        'amount_verified' => $amountMatches,
+                        'actual_amount_cents' => $actualAmountCents,
+                    ]),
                 ]);
 
                 // Payment status will be updated by ProcessMediaUploadJob
 
-                $this->paymentLogger->logPaymentSuccess($payment, $stripePaymentIntent->toArray());
+                $this->paymentLogger->logPaymentSuccess($payment, array_merge($stripePaymentIntent->toArray(), [
+                    'amount_verified' => $amountMatches,
+                ]));
 
                 return $payment;
             } else {

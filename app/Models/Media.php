@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Models\MediaUserWatched;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 
@@ -87,17 +88,23 @@ class Media extends Model
 
     public function shouldTriggerQuiz(int $watchCount): bool
     {
-        return $this->hasQuestion() && $this->quiz_number === $watchCount;
+        Log::info('should not trigger quiz--',[
+            'watch_count' => $watchCount,
+            'quiz_number' => $this->quiz_number,
+            'has_question' => $this->hasQuestion(),
+            'trigger_quiz' => $this->hasQuestion() && $this->quiz_number == $watchCount
+        ]);
+        return $this->hasQuestion() && $this->quiz_number == $watchCount;
     }
 
     public function getWatchesPerRound(): int
     {
-        return 100;
+        return config('services.media.target_views');
     }
 
     public function isRoundComplete(int $watchCount): bool
     {
-        return $watchCount >= $this->getWatchesPerRound();
+        return $watchCount > $this->getWatchesPerRound();
     }
 
     public function incrementRound(): void
