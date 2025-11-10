@@ -15,16 +15,16 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
             $table->foreignUuid('media_id')->constrained()->cascadeOnDelete();
-            $table->string('transaction_reference')->unique(); // Our internal reference
+            $table->string('transaction_reference')->unique();
             $table->string('stripe_payment_intent_id')->nullable();
             $table->string('stripe_charge_id')->nullable();
             $table->enum('status', ['pending', 'succeeded', 'failed', 'canceled', 'refunded']);
-            $table->decimal('amount', 10, 2); // Amount in cents
+            $table->decimal('amount', 10, 2);
             $table->string('currency', 3)->default('usd');
-            $table->string('payment_method')->nullable(); // 'card', 'apple_pay', 'google_pay'
-            $table->json('gateway_response')->nullable(); // Store full Stripe response
+            $table->string('payment_method')->nullable();
+            $table->json('gateway_response')->nullable();
             $table->text('failure_reason')->nullable();
-            $table->boolean('media_uploaded')->default(false); //to be used to determine if a upload was success after payment is taken
+            $table->boolean('media_uploaded')->default(false);
             $table->timestamp('paid_at')->nullable();
             $table->timestamps();
             $table->softDeletes();

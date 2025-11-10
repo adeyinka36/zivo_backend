@@ -18,6 +18,7 @@ return new class extends Migration
 
             $table->timestamps();
             $table->unique(['user_id', 'media_id'], 'unique_user_media_watch');
+            $table->index(['media_id', 'user_id'], 'media_users_watched_lookup_index');
         });
     }
 
@@ -26,7 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        //
         Schema::dropIfExists('media_users_watched');
     }
 };

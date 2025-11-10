@@ -16,6 +16,7 @@ return new class extends Migration
             $table->integer('zivos')->default(0);
             $table->timestamp('email_verified_at')->nullable();
             $table->string('push_token')->nullable();
+            $table->boolean('push_notifications')->default(true);
             $table->string('password');
             $table->rememberToken();
             $table->timestamps();

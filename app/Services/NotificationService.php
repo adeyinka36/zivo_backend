@@ -73,7 +73,7 @@ class NotificationService
         $payload = [
             'to' => $user->push_token,
             'title' => '🎉 Media Upload Complete!',
-            'body' => "Your media '{$media->name}' is now live!",
+            'body' => "Your media is now live!",
             'data' => [
                 'type' => 'media_upload_success',
                 'mediaId' => $media->id,
@@ -121,7 +121,8 @@ class NotificationService
     {
         return $user->push_notifications 
             && !empty($user->push_token)
-            && str_starts_with($user->push_token, 'ExponentPushToken[');
+            && str_starts_with($user->push_token, 'ExponentPushToken[')
+            && $user->email_verified_at !== null;
     }
 
     /**
