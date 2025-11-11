@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Models\MediaUserWatched;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Cache;
 
 class Media extends Model
 {
@@ -129,7 +128,8 @@ class Media extends Model
     }
 
      /**
-     * Get the public or temporary URL for the file.
+     * Get the public URL for the file.
+     * Uses direct public URLs for S3 (bucket is public, no signed URLs needed).
      */
     public function getFileUrl(): ?string
     {
@@ -147,17 +147,9 @@ class Media extends Model
             return Storage::disk('public')->url($this->path);
         }
 
-        // For S3 storage
+        // For S3 storage - use direct public URL (bucket is public)
         if ($this->disk === 's3') {
-            $cacheKey = 'media_url_' . $this->id . '_' . md5($this->path);
-            
-            return Cache::remember($cacheKey, 3600, function () {
-                try {
-                    return Storage::disk('s3')->temporaryUrl($this->path, now()->addHours(24));
-                } catch (\Exception $e) {
-                    return Storage::disk('s3')->url($this->path);
-                }
-            });
+            return Storage::disk('s3')->url($this->path);
         }
 
         // For local public storage
@@ -178,16 +170,9 @@ class Media extends Model
             return Storage::disk('public')->url($this->thumbnail);
         }
 
+        // For S3 storage - use direct public URL (bucket is public)
         if ($this->disk === 's3') {
-            $cacheKey = 'media_thumbnail_' . $this->id . '_' . md5($this->thumbnail);
-            
-            return Cache::remember($cacheKey, 3600, function () {
-                try {
-                    return Storage::disk('s3')->temporaryUrl($this->thumbnail, now()->addHours(24));
-                } catch (\Exception $e) {
-                    return Storage::disk('s3')->url($this->thumbnail);
-                }
-            });
+            return Storage::disk('s3')->url($this->thumbnail);
         }
 
         if ($this->disk === 'public') {
