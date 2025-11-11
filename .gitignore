@@ -26,3 +26,5 @@ Thumbs.db
 yarn-error.log
 storage/logsstorage
 storage
+.vapor/
+.env.staging
