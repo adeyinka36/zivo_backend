@@ -59,11 +59,11 @@ class MediaWatchService
         ]);
 
         $wasNewRecord = $watchRecord->wasRecentlyCreated;
-        $recorded = $isEmailVerified && $wasNewRecord;
+//        $recorded = $isEmailVerified && $wasNewRecord;
 
         return [
             'was_new' => $wasNewRecord,
-            'recorded' => $recorded,
+            'recorded' => $isEmailVerified,
         ];
     }
 
