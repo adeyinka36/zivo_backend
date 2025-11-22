@@ -76,7 +76,6 @@ class MediaController extends Controller
             $user = $request->user();
 
             $media = $this->mediaService->createDraftMedia($data, $user);
-            $this->mediaService->createQuestions($media, $data['questions'] ?? []);
 
             $paymentResult = $this->paymentService->createPaymentIntent($media, $user);
 
@@ -244,7 +243,7 @@ class MediaController extends Controller
         $isCorrect = $similarity >= 80;
 
         if ($isCorrect) {
-            $media->update(['prize_won']);
+            $media->update(['prize_won' => true]);
             AllocateReward::dispatch($media, $request->user());
         }
 

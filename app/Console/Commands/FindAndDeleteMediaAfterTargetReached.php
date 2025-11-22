@@ -42,7 +42,7 @@ class FindAndDeleteMediaAfterTargetReached extends Command
     {
         $this->info('Starting media cleanup process...');
 
-        $mediaToDelete = Media::where('quiz_played', true)
+        $mediaToDelete = Media::where('campaign_completed', true)
             ->get();
 
         if ($mediaToDelete->isEmpty()) {

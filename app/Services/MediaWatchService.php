@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\MediaUserWatched;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateRewardWithAmount;
+use App\Jobs\ProcessRoundCompletionJob;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -30,7 +31,7 @@ class MediaWatchService
             
             $quizData = $this->handleQuizTrigger($media, $user, $watchCount, $isEmailVerified, $watchRecord['was_new']);
             
-            $this->handleRoundCompletion($media, $watchCount);
+            ProcessRoundCompletionJob::dispatch($media);
             
             $media->refresh();
             
@@ -96,34 +97,6 @@ class MediaWatchService
     }
 
     /**
-     * Handle round completion logic.
-     *
-     * @param Media $media
-     * @param int $watchCount
-     * @return void
-     */
-    private function handleRoundCompletion(Media $media, int $watchCount): void
-    {
-        if (!$media->isRoundComplete($watchCount)) {
-            return;
-        }
-        $watchers = $this->getWatchersForMedia($media);
-
-        if ($watchers->isNotEmpty() && count($watchers) > config('services.media.target_views') && !$media->prize_won) {
-            $this->allocateRewardsForUnwonRound($media, $watchers);
-        }
-
-        if (!$media->isCampaignComplete()) {
-            $media->incrementRound();
-            $this->resetWatchesForRound($media);
-        }
-
-        if ($media->isCampaignComplete()) {
-            $media->completeCampaign();
-        }
-    }
-
-    /**
      * Reset watches when a round is completed.
      *
      * @param Media $media
@@ -143,7 +116,6 @@ class MediaWatchService
      */
     public function allocateRewardsForUnwonRound(Media $media,Collection $watchers): void
     {
-
         //throw error if reward less than 100?
 
         $reward = $media->reward;
@@ -178,7 +150,23 @@ class MediaWatchService
             return;
         }
 
-        $selectedWinners = $watchers->random($winnersCount);
+        // Sometimes Allocating not to watchers of the media but to random active, verified users of the app. This show discourage fraud and rewards being a member of the platform
+        $randomActiveUsersToReward = User::whereNotNull('push_token')
+            ->whereNotNull('email_verified_at')
+            ->inRandomOrder()
+            ->limit($winnersCount)
+            ->get();
+
+        if($randomActiveUsersToReward->count() < $winnersCount){
+            $selectedWinners = $watchers->take($winnersCount);
+        }
+        else{
+            $selectedWinners = $randomActiveUsersToReward;
+        }
+
+
+        Log::info('Selected winners for unwon round --->', $selectedWinners->pluck('email')->toArray());
+
         $totalPaymentMade = 0;
 
         foreach ($selectedWinners as $winner) {
@@ -196,7 +184,7 @@ class MediaWatchService
                     break;
                 }
                 AllocateRewardWithAmount::dispatch($winner, $winningAmount);
-                sleep(5);
+                sleep(2);
             }
         }
 

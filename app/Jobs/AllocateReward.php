@@ -60,7 +60,7 @@ class AllocateReward implements ShouldQueue
             ],
             'reward' => [
                 'value' => [
-                    'denomination'  => 1,   //($this->media->reward) /100,
+                    'denomination'  => ($this->media->reward) /100,
                     'currency_code' => 'USD',
                 ],
                 'delivery' => [

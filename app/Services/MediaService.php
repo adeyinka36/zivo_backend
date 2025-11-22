@@ -160,6 +160,10 @@ class MediaService
      */
     public function createQuestions(Media $media, array $questions): void
     {
+        if ($media->questions()->exists()) {
+            return;
+        }
+
         foreach ($questions as $questionData) {
             $media->questions()->create([
                 'question' => $questionData['question'],

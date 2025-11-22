@@ -39,6 +39,8 @@ class Media extends Model
         'active',
         'rounds_completed',
         'campaign_completed',
+        'prize_won',
+        'prize_distributed'
     ];
 
     protected $casts = [
@@ -110,6 +112,10 @@ class Media extends Model
     public function incrementRound(): void
     {
         $this->increment('rounds_completed');
+        $this->update([
+            'prize_won' => false,
+            'prize_distributed' => false
+        ]);
         $this->refresh();
     }
 

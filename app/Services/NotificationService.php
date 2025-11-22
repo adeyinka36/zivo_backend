@@ -25,7 +25,9 @@ class NotificationService
         $subscribedUsers = User::where('push_notifications', true)
             ->whereNotNull('push_token')
             ->where('id', '!=', $uploader->id)
-            ->get();
+            ->get()
+            ->unique('push_token')
+            ->values();
 
         if ($subscribedUsers->isEmpty()) {
             Log::info('No subscribed users found for new media notification');

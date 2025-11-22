@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
+use Illuminate\View\View;
 
 class AuthController extends Controller
 {
@@ -106,16 +107,28 @@ class AuthController extends Controller
         return ErrorResponse::make('Unable to reset password', 400);
     }
 
-    public function verifyEmail(Request $request): JsonResponse
+    /**
+     * Verify user email address.
+     * Returns HTML view for browser requests, JSON for API requests.
+     */
+    public function verifyEmail(Request $request): JsonResponse|View
     {
         $user = \App\Models\User::find($request->route('id'));
 
         if (!$user || !hash_equals((string) $request->route('hash'), sha1($user->getEmailForVerification()))) {
-            return ErrorResponse::make('Invalid verification link', 400);
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return ErrorResponse::make('Invalid verification link', 400);
+            }
+            return view('email-verification-error', [
+                'message' => 'This verification link is invalid or has expired.'
+            ]);
         }
 
         if ($user->hasVerifiedEmail()) {
-            return SuccessResponse::make('Email already verified');
+            if ($request->expectsJson() || $request->wantsJson()) {
+                return SuccessResponse::make('Email already verified');
+            }
+            return view('email-verified');
         }
 
         if ($user->markEmailAsVerified()) {
@@ -126,7 +139,11 @@ class AuthController extends Controller
             }
         }
 
-        return SuccessResponse::make('Email verified successfully');
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return SuccessResponse::make('Email verified successfully');
+        }
+
+        return view('email-verified');
     }
 
     public function resendVerificationEmail(Request $request): JsonResponse
