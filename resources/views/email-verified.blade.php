@@ -116,7 +116,6 @@
             <span class="checkmark">✓</span>
         </div>
         <h1>Email Verified Successfully!</h1>
-        <p class="message">Your email address has been verified. You can now use all features of Zivo.</p>
         <div class="instructions">
             <h2>Next Steps</h2>
             <p>Please return to the app and refresh your profile page to see your verified status.</p>
