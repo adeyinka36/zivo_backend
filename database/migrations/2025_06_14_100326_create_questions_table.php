@@ -3,7 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -20,9 +19,6 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
         });
-
-        // Drop the check constraint if it exists (for PostgreSQL)
-        DB::statement('ALTER TABLE questions DROP CONSTRAINT IF EXISTS questions_answer_check;');
     }
 
     /**
