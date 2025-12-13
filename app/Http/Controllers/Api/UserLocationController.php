@@ -92,29 +92,34 @@ class UserLocationController extends Controller
     private function findOrCreateLocation(array $data): Location
     {
         return DB::transaction(function () use ($data) {
-            // Search for existing locations within the threshold range
-            // This prevents creating duplicate locations for nearby coordinates
-            $existing = Location::whereBetween('latitude', [
-                $data['latitude'] - self::LOCATION_THRESHOLD,
-                $data['latitude'] + self::LOCATION_THRESHOLD,
-            ])
-            ->whereBetween('longitude', [
-                $data['longitude'] - self::LOCATION_THRESHOLD,
-                $data['longitude'] + self::LOCATION_THRESHOLD,
-            ])
-            ->first();
+            $existing = Location::where('region_name', $data['region_name'])
+                ->where('country', $data['country'])
+                ->first();
 
-            // Return existing location if found
             if ($existing) {
+                if (!$existing->country_code && isset($data['country_code'])) {
+                    $existing->update(['country_code' => $data['country_code']]);
+                }
+                if ($existing->continent !== $data['continent']) {
+                    $existing->update(['continent' => $data['continent']]);
+                }
+                if ($existing->latitude == 0 && $existing->longitude == 0) {
+                    $existing->update([
+                        'latitude' => $data['latitude'],
+                        'longitude' => $data['longitude'],
+                        'timezone' => $data['timezone'],
+                    ]);
+                }
+                $existing->refresh();
                 return $existing;
             }
 
-            // Create a new location record with all provided data
             return Location::create([
                 'region_name' => $data['region_name'],
                 'latitude' => $data['latitude'],
                 'longitude' => $data['longitude'],
                 'country' => $data['country'],
+                'country_code' => $data['country_code'] ?? null,
                 'continent' => $data['continent'],
                 'timezone' => $data['timezone'],
             ]);

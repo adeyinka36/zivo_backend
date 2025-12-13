@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Data\PredefinedLocations;
+use App\Data\CountryCodes;
 use App\Models\Location;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -17,21 +18,29 @@ class LocationService
      * @param string $continent
      * @return Location
      */
-    public function createOrFindLocation(string $city, string $country, string $continent): Location
+    public function createOrFindLocation(string $city, string $country, string $continent, ?string $countryCode = null): Location
     {
-        return DB::transaction(function () use ($city, $country, $continent) {
+        return DB::transaction(function () use ($city, $country, $continent, $countryCode) {
             $location = Location::where('region_name', $city)
                 ->where('country', $country)
-                ->where('continent', $continent)
                 ->first();
 
             if ($location) {
+                if (!$location->country_code && $countryCode) {
+                    $location->update(['country_code' => $countryCode]);
+                }
+                if ($location->continent !== $continent) {
+                    $location->update(['continent' => $continent]);
+                }
                 return $location;
             }
+
+            $code = $countryCode ?? CountryCodes::getCountryCode($country);
 
             return Location::create([
                 'region_name' => $city,
                 'country' => $country,
+                'country_code' => $code,
                 'continent' => $continent,
                 'latitude' => 0,
                 'longitude' => 0,
@@ -96,7 +105,8 @@ class LocationService
         }
 
         [$continent, $country, $city] = $parts;
-        $location = $this->createOrFindLocation($city, $country, $continent);
+        $countryCode = CountryCodes::getCountryCode($country);
+        $location = $this->createOrFindLocation($city, $country, $continent, $countryCode);
 
         return [$location->id];
     }
@@ -116,10 +126,11 @@ class LocationService
 
         [$continent, $country] = $parts;
         $cities = PredefinedLocations::getCitiesByCountry($country);
+        $countryCode = CountryCodes::getCountryCode($country);
 
         $locationIds = [];
         foreach ($cities as $city) {
-            $location = $this->createOrFindLocation($city, $country, $continent);
+            $location = $this->createOrFindLocation($city, $country, $continent, $countryCode);
             $locationIds[] = $location->id;
         }
 
@@ -139,8 +150,9 @@ class LocationService
 
         $locationIds = [];
         foreach ($allLocations[$continentIdentifier] ?? [] as $country => $countryCities) {
+            $countryCode = CountryCodes::getCountryCode($country);
             foreach ($countryCities as $city) {
-                $location = $this->createOrFindLocation($city, $country, $continentIdentifier);
+                $location = $this->createOrFindLocation($city, $country, $continentIdentifier, $countryCode);
                 $locationIds[] = $location->id;
             }
         }

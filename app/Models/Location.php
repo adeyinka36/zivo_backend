@@ -13,6 +13,7 @@ class Location extends Model
         'latitude',
         'longitude',
         'country',
+        'country_code',
         'continent',
         'timezone',
     ];

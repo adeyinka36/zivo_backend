@@ -18,6 +18,7 @@ class UpdateLocationRequest extends FormRequest
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
             'country' => 'required|string|max:255',
+            'country_code' => 'required|string|size:2',
             'continent' => 'required|string|max:255',
             'timezone' => 'required|string|max:255',
         ];
