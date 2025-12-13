@@ -6,6 +6,8 @@ use App\Traits\HasUuid;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -28,7 +30,8 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
         'email',
         'password',
         'push_token',
-        'push_notifications'
+        'push_notifications',
+        'location_id',
     ];
 
     /**
@@ -61,5 +64,22 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
     public function sendPasswordResetNotification($token)
     {
         $this->notify(new \App\Notifications\ResetPasswordNotification($token));
+    }
+
+    public function location()
+    {
+        return $this->belongsTo(Location::class);
+    }
+
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(UserAssignment::class);
+    }
+
+    public function assignedMedia(): BelongsToMany
+    {
+        return $this->belongsToMany(Media::class, 'user_assignments', 'user_id', 'media_id')
+            ->withPivot('watched')
+            ->withTimestamps();
     }
 }

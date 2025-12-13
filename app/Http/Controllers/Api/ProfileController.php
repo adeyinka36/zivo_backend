@@ -29,6 +29,7 @@ class ProfileController extends Controller
     {
         $user = $request->user();
         $updatedUser = $this->profileService->updateProfile($user, $request->validated());
+        $updatedUser->load('location');
         
         return response()->json([
             'message' => 'Profile updated successfully',

@@ -78,6 +78,24 @@ class Media extends Model
         return $this->hasMany(MediaUserWatched::class);
     }
 
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(UserAssignment::class);
+    }
+
+    public function assignedUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'user_assignments', 'media_id', 'user_id')
+            ->withPivot('watched')
+            ->withTimestamps();
+    }
+
+    public function locations(): BelongsToMany
+    {
+        return $this->belongsToMany(Location::class, 'media_locations', 'media_id', 'location_id')
+            ->withTimestamps();
+    }
+
     public function getWatchCount(): int
     {
         return $this->watches()->count();

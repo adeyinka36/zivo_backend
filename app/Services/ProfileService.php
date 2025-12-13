@@ -11,6 +11,8 @@ class ProfileService
 {
     public function getProfileWithMedia(User $user): array
     {
+        $user->load('location');
+        
         $media = Media::with(['tags', 'user'])
             ->where('user_id', $user->id)
             ->orderBy('created_at', 'desc')

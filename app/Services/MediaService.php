@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Media;
 use App\Models\User;
 use App\Http\Requests\Media\StoreMediaRequest;
+use App\Services\LocationService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -14,7 +15,8 @@ use Illuminate\Support\Facades\Log;
 class MediaService
 {
     public function __construct(
-        private readonly ThumbnailService $thumbnailService
+        private readonly ThumbnailService $thumbnailService,
+        private readonly LocationService $locationService
     ) {}
 
     /**
@@ -138,7 +140,9 @@ class MediaService
      */
     public function createDraftMedia(array $data, User $user): Media
     {
-        return Media::create([
+        $targetViews = (int) config('services.media.target_views', 10);
+        
+        $media = Media::create([
             'user_id' => $user->id,
             'name' => 'Pending Upload',
             'file_name' => 'pending',
@@ -149,9 +153,18 @@ class MediaService
             'description' => $data['description'] ?? null,
             'reward' => $data['reward'],
             'rounds' => $data['rounds'],
-            'quiz_number' => $data['quiz_number'] ?? 1,
+            'quiz_number' => $targetViews,
             'payment_status' => 'pending',
         ]);
+
+        if (!empty($data['location_selections'])) {
+            $locationIds = $this->locationService->expandLocationSelections($data['location_selections']);
+            if (!empty($locationIds)) {
+                $media->locations()->sync($locationIds);
+            }
+        }
+
+        return $media;
     }
 
 

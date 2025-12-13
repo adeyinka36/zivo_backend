@@ -78,7 +78,7 @@ class PaymentService
                 $totalAmountCents = $expectedAmounts['total_amount_cents'];
                 
                 $paymentIntent = $this->stripe->paymentIntents->create([
-                    'amount' => $totalAmountCents,
+                    'amount' => (int) $totalAmountCents,
                     'currency' => config('stripe.currency'),
                     'metadata' => [
                         'media_id' => $media->id,

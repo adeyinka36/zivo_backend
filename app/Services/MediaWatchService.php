@@ -30,8 +30,11 @@ class MediaWatchService
             $watchCount = $media->getWatchCount();
             
             $quizData = $this->handleQuizTrigger($media, $user, $watchCount, $isEmailVerified, $watchRecord['was_new']);
-            
-            ProcessRoundCompletionJob::dispatch($media);
+
+            if ($media->isRoundComplete($watchCount)) {
+                ProcessRoundCompletionJob::dispatch($media);
+            }
+
             
             $media->refresh();
             

@@ -28,6 +28,7 @@ use App\Models\User;
 use App\Models\Payment;
 use App\Services\MediaService;
 use App\Services\PaymentService;
+use App\Services\LocationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -38,7 +39,8 @@ class MediaController extends Controller
 {
     public function __construct(
         private readonly MediaService $mediaService,
-        private readonly PaymentService $paymentService
+        private readonly PaymentService $paymentService,
+        private readonly LocationService $locationService
     ) {}
 
     public function index(ListMediaRequest $request)
@@ -52,6 +54,8 @@ class MediaController extends Controller
         if ($forceRefresh) {
             Cache::forget($cacheKey);
         }
+
+        //TODO: replace with logic to get only one media for user the one that is the users current_assignment
         
         $media = Cache::remember($cacheKey, 60, function () use ($perPage, $page) {
             $query = Media::with(['user'])
@@ -135,7 +139,8 @@ class MediaController extends Controller
             ]);
         }
 
-        // Use Media record values (server-side) for metadata
+        $targetViews = (int) config('services.media.target_views', 10);
+        
         $metadata = [
             'name' => $file->getClientOriginalName(),
             'file_name' => $file->getClientOriginalName(),
@@ -145,8 +150,15 @@ class MediaController extends Controller
             'reward' => (int) $media->reward,
             'rounds' => (int) $media->rounds,
             'amount_paid' => $totalAmountCents / 100,
-            'quiz_number' => (int) ($request->input('quiz_number') ?? $media->quiz_number ?? 1),
+            'quiz_number' => $targetViews,
         ];
+
+        if (!empty($request->input('location_selections'))) {
+            $locationIds = $this->locationService->expandLocationSelections($request->input('location_selections'));
+            if (!empty($locationIds)) {
+                $media->locations()->sync($locationIds);
+            }
+        }
 
         $jobs = collect([
             new ProcessMediaUploadJob($media->id, $path, $disk, $metadata, $request->input('questions', []))

@@ -17,10 +17,12 @@ class CreatePaymentIntentRequest extends FormRequest
             'description' => 'nullable|string|max:1000',
             'reward' => 'required|integer|min:100|max:1000000',
             'rounds' => 'required|integer|min:1|max:1000000',
-            'quiz_number' => 'required|integer|min:1|max:100',
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:1000',
             'questions.*.answer' => 'required|string|max:19|regex:/^[a-zA-Z0-9]+$/',
+            'location_selections' => 'nullable|array',
+            'location_selections.*.type' => 'required|string|in:city,country,continent',
+            'location_selections.*.identifier' => 'required|string',
         ];
     }
 
@@ -46,11 +48,6 @@ class CreatePaymentIntentRequest extends FormRequest
             'questions.*.answer.required' => 'Correct answer is required.',
             'questions.*.answer.max' => 'Answer cannot exceed 19 characters.',
             'questions.*.answer.regex' => 'Answer may only contain letters and numbers without spaces.',
-
-            'quiz_number.required' => 'Quiz number is required.',
-            'quiz_number.integer' => 'Quiz number must be a valid number.',
-            'quiz_number.min' => 'Quiz number must be at least 1.',
-            'quiz_number.max' => 'Quiz number cannot exceed 100.',
         ];
     }
 } 

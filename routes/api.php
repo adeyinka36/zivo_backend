@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\UserLocationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -34,7 +36,8 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/user', function (Request $request) {
-            return $request->user();
+            $user = $request->user()->load('location');
+            return new \App\Http\Resources\UserResource($user);
         });
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail']);
@@ -44,6 +47,9 @@ Route::prefix('v1')->group(function () {
         Route::put('/profile', [ProfileController::class, 'update']);
         Route::put('/users/push-token', [ProfileController::class, 'updatePushToken']);
         Route::get('/user/media', [ProfileController::class, 'getUserMedia']);
+        Route::put('/users/location', [UserLocationController::class, 'update']);
+
+        Route::get('locations', [LocationController::class, 'index']);
 
         Route::get('media', [MediaController::class, 'index']);
         Route::post('media/payment-intent', [MediaController::class, 'createPaymentIntent']);

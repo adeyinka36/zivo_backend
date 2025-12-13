@@ -53,6 +53,8 @@ class ProcessMediaUploadJob implements ShouldQueue
                 return;
             }
             
+            $targetViews = (int) config('services.media.target_views', 10);
+            
             $media->update([
                 'name' => $this->metadata['name'],
                 'file_name' => $this->metadata['file_name'],
@@ -66,7 +68,7 @@ class ProcessMediaUploadJob implements ShouldQueue
                 'payment_status' => 'paid',
                 'paid_at' => now(),
                 'amount_paid' => $this->metadata['amount_paid'],
-                'quiz_number' => $this->metadata['quiz_number'] ?? 1,
+                'quiz_number' => $targetViews,
                 'active' => true,
             ]);
 
