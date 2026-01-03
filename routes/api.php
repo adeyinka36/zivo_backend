@@ -69,6 +69,8 @@ Route::prefix('v1')->group(function () {
         });
     });
 
+    Route::post('webhooks/stripe', [PaymentController::class, 'webhook']);
+
     Route::get('/health', function () {
         return response()->json([
             'status' => 'success',
@@ -76,6 +78,4 @@ Route::prefix('v1')->group(function () {
             'timestamp' => now()
         ]);
     });
-
-    Route::post('webhooks/stripe', [PaymentController::class, 'webhook']);
 });

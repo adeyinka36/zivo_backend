@@ -40,7 +40,9 @@ class ProfileController extends Controller
     public function getUserMedia(Request $request): JsonResponse
     {
         $user = $request->user();
-        $media = $this->profileService->getUserMedia($user);
+        $page = $request->input('page', 1);
+        $perPage = 10;
+        $media = $this->profileService->getUserMedia($user, $perPage, $page);
         
         return response()->json([
             'data' => UserMediaResource::collection($media),

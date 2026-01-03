@@ -15,6 +15,7 @@ use App\Http\Resources\MediaResource;
 use App\Http\Resources\MediaListResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
+use App\Jobs\AssignMediaToUsers;
 use App\Jobs\GenerateThumbnailJob;
 use App\Jobs\ProcessMediaUploadJob;
 use App\Jobs\SendPushNotificationJob;
@@ -45,29 +46,28 @@ class MediaController extends Controller
 
     public function index(ListMediaRequest $request)
     {
-        $perPage = $request->input('per_page', 20);
-        $page = $request->input('page', 1);
-        $forceRefresh = $request->input('force_refresh', false);
-        
-        $cacheKey = "media_list_page_{$page}_per_{$perPage}";
-        
-        if ($forceRefresh) {
-            Cache::forget($cacheKey);
+        $user = $request->user();
+
+        if (!$user) {
+            return MediaListResource::collection(collect([]));
         }
 
-        //TODO: replace with logic to get only one media for user the one that is the users current_assignment
-        
-        $media = Cache::remember($cacheKey, 60, function () use ($perPage, $page) {
-            $query = Media::with(['user'])
-                ->orderBy('created_at', 'desc')
-                ->where('size', '>', 0)
-                ->where('campaign_completed', false)
-                ->where('mime_type', '!=', 'pending');
+        $currentAssignment = \App\Models\UserAssignment::where('user_id', $user->id)
+            ->where('current', true)
+            ->with(['media.user'])
+            ->first();
 
-            return $query->paginate($perPage, ['*'], 'page', $page);
-        });
+        if (!$currentAssignment || !$currentAssignment->media) {
+            return MediaListResource::collection(collect([]));
+        }
 
-        return MediaListResource::collection($media);
+        $media = $currentAssignment->media;
+
+        if ($media->size <= 0 || $media->campaign_completed || $media->mime_type === 'pending') {
+            return MediaListResource::collection(collect([]));
+        }
+
+        return MediaListResource::collection(collect([$media]));
     }
 
     /**
@@ -168,6 +168,7 @@ class MediaController extends Controller
             $jobs->push(new GenerateThumbnailJob($media->id));
         }
 
+        $jobs->push(new AssignMediaToUsers($media->id));
         $jobs->push(new SendPushNotificationJob($user->id, $media->id));
 
         Bus::chain($jobs)

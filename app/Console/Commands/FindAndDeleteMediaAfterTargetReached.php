@@ -24,7 +24,7 @@ class FindAndDeleteMediaAfterTargetReached extends Command
      *
      * @var string
      */
-    protected $description = "Deleting media after the quiz has been triggered database and storage (S3)";
+    protected $description = "Deleting media from database and storage (S3) after the campaign is completed";
 
 
     /**
@@ -42,11 +42,17 @@ class FindAndDeleteMediaAfterTargetReached extends Command
     {
         $this->info('Starting media cleanup process...');
 
+        $totalMedia = Media::count();
+        $completedMedia = Media::where('campaign_completed', true)->count();
+        
+        $this->info("Total media in database: {$totalMedia}");
+        $this->info("Media with campaign_completed = true: {$completedMedia}");
+
         $mediaToDelete = Media::where('campaign_completed', true)
             ->get();
 
         if ($mediaToDelete->isEmpty()) {
-            $this->info('No media found for deletion.');
+            $this->warn('No media found for deletion. No media has campaign_completed = true.');
             return CommandAlias::SUCCESS;
         }
 

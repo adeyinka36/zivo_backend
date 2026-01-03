@@ -79,7 +79,7 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
     public function assignedMedia(): BelongsToMany
     {
         return $this->belongsToMany(Media::class, 'user_assignments', 'user_id', 'media_id')
-            ->withPivot('watched')
+            ->withPivot('current')
             ->withTimestamps();
     }
 }

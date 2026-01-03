@@ -9,26 +9,45 @@ class UserMediaResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        return [
-            'id' => $this->id,
-            'name' => $this->name,
-            'file_name' => $this->file_name,
-            'mime_type' => $this->mime_type,
-            'media_type' => $this->getMediaType(),
-            'reward' => $this->reward,
-            'url' => $this->getFileUrl(),
-            'description' => $this->description,
-            'created_at' => $this->created_at->toISOString(),
-            'updated_at' => $this->updated_at->toISOString(),
-            'has_watched' => $this->getHasWatchedAttribute(),
-            'thumbnail' => $this->getThumbnailUrl(),
-            'uploader_id' => $this->user_id,
-            'uploader_username' => $this->user->name,
-        ];
+        try {
+            $uploaderUsername = 'Unknown';
+            if ($this->relationLoaded('user') && $this->user) {
+                $uploaderUsername = $this->user->username ?? $this->user->name ?? 'Unknown';
+            }
+            
+            return [
+                'id' => $this->id,
+                'name' => $this->name,
+                'file_name' => $this->file_name,
+                'mime_type' => $this->mime_type,
+                'media_type' => $this->media_type ?? $this->getMediaType(),
+                'reward' => $this->reward ?? 0,
+                'url' => $this->getFileUrl() ?? '',
+                'description' => $this->description ?? '',
+                'created_at' => $this->created_at?->toISOString() ?? now()->toISOString(),
+                'updated_at' => $this->updated_at?->toISOString() ?? now()->toISOString(),
+                'has_watched' => $this->getHasWatchedAttribute(),
+                'thumbnail' => $this->getThumbnailUrl(),
+                'uploader_id' => $this->user_id,
+                'uploader_username' => $uploaderUsername,
+                'view_count' => $this->view_count ?? 0,
+            ];
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error in UserMediaResource', [
+                'media_id' => $this->id ?? 'unknown',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
     }
 
     private function getMediaType(): string
     {
+        if (!$this->mime_type) {
+            return 'unknown';
+        }
+        
         if (str_starts_with($this->mime_type, 'video/')) {
             return 'video';
         }
@@ -40,12 +59,6 @@ class UserMediaResource extends JsonResource
         return 'unknown';
     }
 
-    private function getThumbnailUrl(): ?string
-    {
-        // For now, return the main URL as thumbnail
-        // In the future, this could be a separate thumbnail field
-        return $this->getFileUrl();
-    }
 
     private function getHasWatchedAttribute(): bool
     {

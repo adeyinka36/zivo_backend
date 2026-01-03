@@ -19,12 +19,12 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'username' => $this->username,
             'email' => $this->email,
-            'zivos' => $this->zivos ?: 0,
-            'email_verified_at' => $this->email_verified_at,
+            'zivos' => $this->zivos ?? 0,
+            'email_verified_at' => $this->email_verified_at?->toISOString(),
             'push_notifications' => $this->push_notifications,
             'region_name' => $this->whenLoaded('location', fn() => $this->location->region_name),
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at,
+            'created_at' => $this->created_at?->toISOString() ?? $this->created_at,
+            'updated_at' => $this->updated_at?->toISOString() ?? $this->updated_at,
         ];
     }
 }

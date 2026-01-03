@@ -13,7 +13,7 @@ class ProfileService
     {
         $user->load('location');
         
-        $media = Media::with(['tags', 'user'])
+        $media = Media::with('user')
             ->where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->get();
@@ -38,11 +38,11 @@ class ProfileService
         });
     }
 
-    public function getUserMedia(User $user, int $perPage = 20)
+    public function getUserMedia(User $user, int $perPage = 20, int $page = 1)
     {
-        return Media::with(['tags', 'user'])
+        return Media::with('user')
             ->where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
-            ->paginate($perPage);
+            ->paginate($perPage, ['*'], 'page', $page);
     }
 } 

@@ -86,7 +86,7 @@ class Media extends Model
     public function assignedUsers(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'user_assignments', 'media_id', 'user_id')
-            ->withPivot('watched')
+            ->withPivot('current')
             ->withTimestamps();
     }
 

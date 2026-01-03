@@ -117,6 +117,58 @@ class NotificationService
     }
 
     /**
+     * Send notification when media becomes current for user
+     */
+    public function sendCurrentMediaAssigned(User $user, Media $media): bool
+    {
+        if (!$this->canSendNotification($user)) {
+            return false;
+        }
+
+        $payload = [
+            'to' => $user->push_token,
+            'title' => '🎬 New Media Available!',
+            'body' => 'You have new media to watch',
+            'data' => [
+                'type' => 'current_media_assigned',
+                'mediaId' => $media->id,
+                'mediaName' => Str::limit($media->description ?? 'Media', 15, '...'),
+                'screen' => 'explore'
+            ],
+            'sound' => 'default',
+            'badge' => 1
+        ];
+
+        return $this->sendToExpo($payload, $user->id);
+    }
+
+    /**
+     * Send notification when current media is removed for user
+     */
+    public function sendCurrentMediaRemoved(User $user, Media $media): bool
+    {
+        if (!$this->canSendNotification($user)) {
+            return false;
+        }
+
+        $payload = [
+            'to' => $user->push_token,
+            'title' => 'Media No Longer Available',
+            'body' => 'Your assigned media is no longer available',
+            'data' => [
+                'type' => 'current_media_removed',
+                'mediaId' => $media->id,
+                'mediaName' => Str::limit($media->description ?? 'Media', 15, '...'),
+                'screen' => 'explore'
+            ],
+            'sound' => 'default',
+            'badge' => 1
+        ];
+
+        return $this->sendToExpo($payload, $user->id);
+    }
+
+    /**
      * Check if notification can be sent to user
      */
     private function canSendNotification(User $user): bool

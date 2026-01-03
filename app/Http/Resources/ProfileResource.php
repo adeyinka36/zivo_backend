@@ -18,7 +18,9 @@ class ProfileResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'username' => $this->username,
             'email' => $this->email,
+            'email_verified_at' => $this->email_verified_at?->toISOString(),
             'push_notifications' => $this->push_notifications,
             'region_name' => $this->whenLoaded('location', fn() => $this->location->region_name),
             'created_at' => $this->created_at->toISOString(),
