@@ -17,6 +17,7 @@ class Media extends Model
 {
     use HasFactory, HasUuids;
 
+//    public mixed $locations;
     protected $fillable = [
         'user_id',
         'name',
