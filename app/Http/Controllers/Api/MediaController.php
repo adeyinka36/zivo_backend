@@ -150,7 +150,7 @@ class MediaController extends Controller
             'reward' => (int) $media->reward,
             'rounds' => (int) $media->rounds,
             'amount_paid' => $totalAmountCents / 100,
-            'quiz_number' => $targetViews,
+            'quiz_number' => rand(1, $targetViews),
         ];
 
         if (!empty($request->input('location_selections'))) {
@@ -200,7 +200,7 @@ class MediaController extends Controller
      *
      * @param Media $media
      * @param User $user
-     * @param MarkAsWatchedRequest $request
+     * @param MediaWatchService $watchService
      * @return JsonResponse
      */
     public function markAsWatched(
@@ -249,11 +249,9 @@ class MediaController extends Controller
             return response()->json(['message' => 'Question not found'], 404);
         }
 
-        $userAnswer = strtolower(trim($data['answer']));
-        $correctAnswer = strtolower(trim($question->answer));
-        
-        similar_text($userAnswer, $correctAnswer, $similarity);
-        $isCorrect = $similarity >= 80;
+        $userAnswer = strtoupper(trim($data['answer']));
+        $correctAnswer = strtoupper(trim($question->answer));
+        $isCorrect = $userAnswer === $correctAnswer;
 
         if ($isCorrect) {
             $media->update(['prize_won' => true]);
@@ -262,18 +260,16 @@ class MediaController extends Controller
 
         $resultCorrectness = $isCorrect ? 'correct' : 'incorrect';
 
-        Log::info("Quiz answered $resultCorrectness incorrectly", [
+        Log::info("Quiz answered $resultCorrectness", [
             'media_id' => $media->id,
             'user_id' => $request->user()->id,
             'user_answer' => $userAnswer,
             'correct_answer' => $correctAnswer,
-            'similarity' => $similarity
         ]);
 
         return response()->json([
             'message' => 'Quiz result processed successfully',
             'is_correct' => $isCorrect,
-            'similarity' => round($similarity, 2)
         ], 200);
     }
 }

@@ -22,7 +22,7 @@ class QuizResultRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'answer' => 'required|string|max:19|regex:/^[a-zA-Z0-9]+$/',
+            'answer' => 'required|string|in:A,B,C,D',
             'media_id' => 'required|exists:media,id',
         ];
     }
@@ -37,8 +37,7 @@ class QuizResultRequest extends FormRequest
         return [
             'answer.required' => 'The answer field is required.',
             'answer.string' => 'The answer must be a string.',
-            'answer.max' => 'The answer may not be greater than 19 characters.',
-            'answer.regex' => 'The answer may only contain letters and numbers without spaces.',
+            'answer.in' => 'The answer must be A, B, C, or D.',
             'media_id.required' => 'The media_id field is required.',
             'media_id.exists' => 'The selected media_id is invalid.',
         ];

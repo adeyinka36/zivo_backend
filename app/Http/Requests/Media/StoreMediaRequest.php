@@ -40,11 +40,7 @@ class StoreMediaRequest extends FormRequest
             'reward' => 'nullable|integer|min:100|max:100000000000',
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:1000',
-            'questions.*.answer' => 'required|string|in:A,B,C,D',
-            'questions.*.option_a' => 'required|string|max:255',
-            'questions.*.option_b' => 'required|string|max:255',
-            'questions.*.option_c' => 'required|string|max:255',
-            'questions.*.option_d' => 'required|string|max:255',
+            'questions.*.answer' => 'required|string|max:19|regex:/^[a-zA-Z0-9]+$/',
         ];
     }
 
@@ -67,15 +63,8 @@ class StoreMediaRequest extends FormRequest
             'questions.*.question.required' => 'Question text is required.',
             'questions.*.question.max' => 'Question text cannot exceed 1000 characters.',
             'questions.*.answer.required' => 'Correct answer is required.',
-            'questions.*.answer.in' => 'Answer must be A, B, C, or D.',
-            'questions.*.option_a.required' => 'Option A is required.',
-            'questions.*.option_a.max' => 'Option A cannot exceed 255 characters.',
-            'questions.*.option_b.required' => 'Option B is required.',
-            'questions.*.option_b.max' => 'Option B cannot exceed 255 characters.',
-            'questions.*.option_c.required' => 'Option C is required.',
-            'questions.*.option_c.max' => 'Option C cannot exceed 255 characters.',
-            'questions.*.option_d.required' => 'Option D is required.',
-            'questions.*.option_d.max' => 'Option D cannot exceed 255 characters.',
+            'questions.*.answer.max' => 'Answer may not be greater than 19 characters.',
+            'questions.*.answer.regex' => 'Answer may only contain letters and numbers without spaces.',
         ];
     }
 }

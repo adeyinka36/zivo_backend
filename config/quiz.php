@@ -1,0 +1,32 @@
+<?php
+
+return [
+    'word_list' => [
+        'apple', 'banana', 'orange', 'grape', 'strawberry', 'blueberry', 'cherry', 'peach', 'mango', 'pineapple',
+        'car', 'bike', 'train', 'plane', 'boat', 'truck', 'bus', 'motorcycle', 'scooter', 'helicopter',
+        'dog', 'cat', 'bird', 'fish', 'horse', 'cow', 'pig', 'sheep', 'goat', 'rabbit',
+        'house', 'apartment', 'building', 'school', 'hospital', 'store', 'restaurant', 'hotel', 'office', 'library',
+        'book', 'pen', 'pencil', 'paper', 'computer', 'phone', 'tablet', 'keyboard', 'mouse', 'screen',
+        'sun', 'moon', 'star', 'cloud', 'rain', 'snow', 'wind', 'storm', 'lightning', 'thunder',
+        'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'black', 'white', 'brown',
+        'happy', 'sad', 'angry', 'excited', 'calm', 'nervous', 'brave', 'kind', 'smart', 'funny',
+        'run', 'walk', 'jump', 'swim', 'dance', 'sing', 'play', 'read', 'write', 'draw',
+        'water', 'fire', 'earth', 'air', 'ice', 'rock', 'tree', 'flower', 'grass', 'leaf',
+        'bread', 'rice', 'pasta', 'pizza', 'burger', 'salad', 'soup', 'sandwich', 'cake', 'cookie',
+        'mountain', 'river', 'ocean', 'lake', 'forest', 'desert', 'island', 'beach', 'valley', 'hill',
+        'music', 'song', 'dance', 'guitar', 'piano', 'drum', 'violin', 'flute', 'trumpet', 'saxophone',
+        'doctor', 'teacher', 'engineer', 'artist', 'chef', 'pilot', 'nurse', 'lawyer', 'farmer', 'scientist',
+        'morning', 'afternoon', 'evening', 'night', 'day', 'week', 'month', 'year', 'hour', 'minute',
+        'friend', 'family', 'parent', 'child', 'brother', 'sister', 'cousin', 'neighbor', 'classmate', 'colleague',
+        'city', 'country', 'state', 'town', 'village', 'street', 'avenue', 'road', 'park', 'bridge',
+        'game', 'sport', 'football', 'basketball', 'soccer', 'tennis', 'baseball', 'golf', 'swimming', 'running',
+        'winter', 'spring', 'summer', 'autumn', 'january', 'february', 'march', 'april', 'may', 'june',
+        'breakfast', 'lunch', 'dinner', 'snack', 'coffee', 'tea', 'juice', 'milk', 'soda', 'water',
+        'table', 'chair', 'bed', 'sofa', 'desk', 'lamp', 'window', 'door', 'wall', 'floor',
+        'shirt', 'pants', 'dress', 'shoes', 'hat', 'jacket', 'sweater', 'socks', 'gloves', 'scarf',
+        'circle', 'square', 'triangle', 'rectangle', 'oval', 'diamond', 'star', 'heart', 'arrow', 'line',
+        'number', 'letter', 'word', 'sentence', 'story', 'poem', 'article', 'essay', 'report', 'note',
+        'kitchen', 'bedroom', 'bathroom', 'living', 'dining', 'garage', 'garden', 'basement', 'attic', 'balcony',
+        'zivo', 'platform', 'media', 'video', 'photo', 'image', 'content', 'creator', 'viewer', 'reward',
+    ],
+];

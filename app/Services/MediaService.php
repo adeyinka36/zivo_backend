@@ -178,17 +178,63 @@ class MediaService
         }
 
         foreach ($questions as $questionData) {
+            $answerWord = strtolower(trim($questionData['answer']));
+            $options = $this->generateOptions($answerWord);
+            
             $media->questions()->create([
                 'question' => $questionData['question'],
-                'answer' => $questionData['answer'],
+                'answer' => $options['correct_option'],
+                'option_a' => $options['options'][0],
+                'option_b' => $options['options'][1],
+                'option_c' => $options['options'][2],
+                'option_d' => $options['options'][3],
             ]);
         }
 
         if (empty($questions)) {
+            $options = $this->generateOptions('zivo');
             $media->questions()->create([
                 'question' => 'What is this platform?',
-                'answer' => 'Zivo',
+                'answer' => $options['correct_option'],
+                'option_a' => $options['options'][0],
+                'option_b' => $options['options'][1],
+                'option_c' => $options['options'][2],
+                'option_d' => $options['options'][3],
             ]);
         }
+    }
+
+    /**
+     * Generate multiple choice options from answer word
+     *
+     * @param string $answerWord
+     * @return array{options: array<int, string>, correct_option: string}
+     */
+    private function generateOptions(string $answerWord): array
+    {
+        $wordList = config('quiz.word_list', []);
+        $availableWords = array_filter($wordList, fn($word) => strtolower($word) !== strtolower($answerWord));
+        
+        if (count($availableWords) < 3) {
+            $availableWords = array_merge($availableWords, ['apple', 'banana', 'orange', 'grape', 'strawberry']);
+            $availableWords = array_filter($availableWords, fn($word) => strtolower($word) !== strtolower($answerWord));
+        }
+        
+        $randomWords = array_values(array_intersect_key($availableWords, array_flip(array_rand($availableWords, 3))));
+        $allOptions = array_merge([$answerWord], $randomWords);
+        shuffle($allOptions);
+        
+        $correctOption = 'A';
+        foreach (['A', 'B', 'C', 'D'] as $index => $option) {
+            if (strtolower($allOptions[$index]) === strtolower($answerWord)) {
+                $correctOption = $option;
+                break;
+            }
+        }
+        
+        return [
+            'options' => $allOptions,
+            'correct_option' => $correctOption,
+        ];
     }
 }
