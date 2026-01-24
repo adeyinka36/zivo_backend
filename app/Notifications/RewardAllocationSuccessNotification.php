@@ -36,7 +36,7 @@ class RewardAllocationSuccessNotification extends Notification
         $formattedAmount = '$' . number_format($this->rewardAmount, 2);
 
         return (new MailMessage)
-            ->subject('🎁 You\'ve Won a Reward!')
+            ->subject('🎁 You\'ve Won a Reward From  Zivo!')
             ->greeting('Congratulations ' . $notifiable->name . '!')
             ->line('We\'re excited to inform you that you\'ve been selected as a winner and have received a reward.')
             ->line('**Reward Amount:** ' . $formattedAmount)

@@ -68,7 +68,7 @@ class ProcessMediaUploadJob implements ShouldQueue
                 'payment_status' => 'paid',
                 'paid_at' => now(),
                 'amount_paid' => $this->metadata['amount_paid'],
-                'quiz_number' => $targetViews,
+                'quiz_number' => rand(1, $targetViews),
                 'active' => true,
             ]);
 

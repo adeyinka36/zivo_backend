@@ -153,7 +153,7 @@ class MediaService
             'description' => $data['description'] ?? null,
             'reward' => $data['reward'],
             'rounds' => $data['rounds'],
-            'quiz_number' => $targetViews,
+            'quiz_number' => rand(1, $targetViews),
             'payment_status' => 'pending',
         ]);
 
