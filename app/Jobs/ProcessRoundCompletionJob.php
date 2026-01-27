@@ -38,20 +38,6 @@ class ProcessRoundCompletionJob implements ShouldQueue
                 return;
             }
 
-            //no more unwon rounds reward because we are using options now
-//            $watchers = $this->getWatchersForMedia($media);
-
-//            if (
-//                    !$media->isCampaignComplete() &&
-//                    $watchers->isNotEmpty() &&
-//                    (count($watchers) > config('services.media.target_views')) &&
-//                    !$media->prize_won &&
-//                    !$media->prize_distributed
-//            ) {
-//                $mediaWatchService->allocateRewardsForUnwonRound($media, $watchers);
-//            }
-
-
             if (!$media->isCampaignComplete()) {
                 $media->incrementRound();
                 $this->resetWatchesForRound($media);
