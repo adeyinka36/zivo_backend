@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\PlatformController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\UserLocationController;
 use Illuminate\Http\Request;
@@ -78,4 +79,6 @@ Route::prefix('v1')->group(function () {
             'timestamp' => now()
         ]);
     });
+
+    Route::get('/platform-info', [\App\Http\Controllers\Api\PlatformController::class, 'getPlatformInfo']);
 });
