@@ -49,7 +49,15 @@ class UserLocationController extends Controller
 
             if ($this->shouldUpdateLocation($user, $location)) {
                 $user->location_id = $location->id;
+                $user->latitude = $data['latitude'];
+                $user->longitude = $data['longitude'];
                 $user->save();
+            } else {
+                if ($user->latitude != $data['latitude'] || $user->longitude != $data['longitude']) {
+                    $user->latitude = $data['latitude'];
+                    $user->longitude = $data['longitude'];
+                    $user->save();
+                }
             }
 
             return response()->json([

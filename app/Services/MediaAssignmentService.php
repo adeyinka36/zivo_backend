@@ -67,7 +67,7 @@ class MediaAssignmentService
     }
 
     /**
-     * Select users based on location priority.
+     * Select users based on location priority using coordinate-based radius search.
      *
      * @param Media $media
      * @param int $neededCount
@@ -83,6 +83,129 @@ class MediaAssignmentService
         if ($media->locations->isEmpty()) {
             return $this->getUsers($neededCount, $excludeUserIds);
         }
+
+        $coordinates = $this->extractCoordinates($media->locations);
+        
+        if (empty($coordinates)) {
+            return $this->selectUsersByLocationHierarchy($media, $neededCount, $excludeUserIds);
+        }
+
+        $radii = [5, 10, 20, 50, 100, 250, 500, 1000];
+
+        foreach ($radii as $radiusKm) {
+            if (count($selectedUsers) >= $neededCount) {
+                break;
+            }
+
+            $remaining = $neededCount - count($selectedUsers);
+            $radiusUsers = $this->getUsersWithinRadius($coordinates, $radiusKm, $remaining, $excludeUserIds);
+            
+            $selectedUsers = array_merge($selectedUsers, $radiusUsers);
+            $excludeUserIds = array_unique(array_merge($excludeUserIds, array_column($radiusUsers, 'id')));
+        }
+
+        if (count($selectedUsers) < $neededCount) {
+            $remaining = $neededCount - count($selectedUsers);
+            $generalUsers = $this->getUsers($remaining, $excludeUserIds);
+            $selectedUsers = array_merge($selectedUsers, $generalUsers);
+        }
+
+        return array_slice($selectedUsers, 0, $neededCount);
+    }
+
+    /**
+     * Extract valid coordinates from locations.
+     *
+     * @param \Illuminate\Database\Eloquent\Collection $locations
+     * @return array Array of [latitude, longitude] pairs
+     */
+    private function extractCoordinates($locations): array
+    {
+        $coordinates = [];
+
+        foreach ($locations as $location) {
+            $lat = (float) $location->latitude;
+            $lng = (float) $location->longitude;
+
+            if ($lat != 0.0 && $lng != 0.0 && abs($lat) <= 90 && abs($lng) <= 180) {
+                $coordinates[] = ['latitude' => $lat, 'longitude' => $lng];
+            }
+        }
+
+        return $coordinates;
+    }
+
+    /**
+     * Get users within specified radius of any coordinate point.
+     *
+     * @param array $coordinates Array of ['latitude' => float, 'longitude' => float]
+     * @param float $radiusKm Radius in kilometers
+     * @param int $limit Maximum number of users to return
+     * @param array $excludeUserIds User IDs to exclude
+     * @return array
+     */
+    private function getUsersWithinRadius(array $coordinates, float $radiusKm, int $limit, array $excludeUserIds): array
+    {
+        if (empty($coordinates) || $limit <= 0) {
+            return [];
+        }
+
+        $query = User::query()
+            ->whereNotNull('email_verified_at')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', 0)
+            ->where('longitude', '!=', 0)
+            ->whereNotIn('id', $excludeUserIds);
+
+        if (count($coordinates) === 1) {
+            $coord = $coordinates[0];
+            $lat = (float) $coord['latitude'];
+            $lng = (float) $coord['longitude'];
+
+            $query->whereRaw(
+                "6371 * acos(
+                    cos(radians(?)) * cos(radians(users.latitude)) *
+                    cos(radians(users.longitude) - radians(?)) +
+                    sin(radians(?)) * sin(radians(users.latitude))
+                ) <= ?",
+                [$lat, $lng, $lat, $radiusKm]
+            );
+        } else {
+            $query->where(function ($q) use ($coordinates, $radiusKm) {
+                foreach ($coordinates as $coord) {
+                    $lat = (float) $coord['latitude'];
+                    $lng = (float) $coord['longitude'];
+
+                    $q->orWhereRaw(
+                        "6371 * acos(
+                            cos(radians(?)) * cos(radians(users.latitude)) *
+                            cos(radians(users.longitude) - radians(?)) +
+                            sin(radians(?)) * sin(radians(users.latitude))
+                        ) <= ?",
+                        [$lat, $lng, $lat, $radiusKm]
+                    );
+                }
+            });
+        }
+
+        return $query
+            ->limit($limit)
+            ->get()
+            ->toArray();
+    }
+
+    /**
+     * Fallback method: Select users by location hierarchy (city, country, continent).
+     *
+     * @param Media $media
+     * @param int $neededCount
+     * @param array $excludeUserIds
+     * @return array
+     */
+    private function selectUsersByLocationHierarchy(Media $media, int $neededCount, array $excludeUserIds): array
+    {
+        $selectedUsers = [];
 
         $cityLocationIds = $media->locations->pluck('id')->toArray();
         $countryLocationIds = $this->getCountryLocationIds($media->locations);
