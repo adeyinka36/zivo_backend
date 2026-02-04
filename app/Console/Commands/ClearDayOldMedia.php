@@ -51,7 +51,6 @@ class ClearDayOldMedia extends Command
         $this->info("Looking for media files older than {$hours} hours (before {$cutoffTime->format('Y-m-d H:i:s')})...");
 
         $oldMedia = Media::where('created_at', '<', $cutoffTime)
-            ->with(['tags', 'questions', 'payments'])
             ->get();
 
         if ($oldMedia->isEmpty()) {

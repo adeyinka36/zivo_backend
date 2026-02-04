@@ -7,7 +7,6 @@ use App\Models\User;
 use App\Models\MediaUserWatched;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateRewardWithAmount;
-use App\Jobs\ProcessRoundCompletionJob;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -31,11 +30,6 @@ class MediaWatchService
             
             $quizData = $this->handleQuizTrigger($media, $user, $watchCount, $isEmailVerified, $watchRecord['was_new']);
 
-            if ($media->isRoundComplete($watchCount)) {
-                ProcessRoundCompletionJob::dispatch($media);
-            }
-
-            
             $media->refresh();
             
             return [

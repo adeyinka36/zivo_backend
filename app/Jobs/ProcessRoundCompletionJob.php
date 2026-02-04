@@ -5,7 +5,10 @@ namespace App\Jobs;
 use App\Models\Media;
 use App\Models\MediaUserWatched;
 use App\Models\User;
+use App\Models\UserAssignment;
+use App\Services\MediaAssignmentService;
 use App\Services\MediaWatchService;
+use App\Services\NotificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,10 +30,12 @@ class ProcessRoundCompletionJob implements ShouldQueue
         private readonly Media $media
     ) {}
 
-    public function handle(MediaWatchService $mediaWatchService): void
-    {
-
-        DB::transaction(function () use ($mediaWatchService) {
+    public function handle(
+        MediaWatchService $mediaWatchService,
+        MediaAssignmentService $assignmentService,
+        NotificationService $notificationService
+    ): void {
+        DB::transaction(function () use ($mediaWatchService, $assignmentService, $notificationService) {
             $media = $this->media;
             $watchCount = $media->getWatchCount();
 
@@ -41,10 +46,16 @@ class ProcessRoundCompletionJob implements ShouldQueue
             if (!$media->isCampaignComplete()) {
                 $media->incrementRound();
                 $this->resetWatchesForRound($media);
+                $this->resetAssignmentsForRound($media, $assignmentService);
             }
 
             if ($media->isCampaignComplete()) {
+                $wasAlreadyComplete = $media->campaign_completed;
                 $media->completeCampaign();
+
+                if (!$wasAlreadyComplete) {
+                    $this->notifyCampaignCompletion($media, $notificationService);
+                }
             }
         });
     }
@@ -64,10 +75,46 @@ class ProcessRoundCompletionJob implements ShouldQueue
         MediaUserWatched::where('media_id', $media->id)->delete();
     }
 
+    private function resetAssignmentsForRound(Media $media, MediaAssignmentService $assignmentService): void
+    {
+        $deletedCount = UserAssignment::where('media_id', $media->id)->delete();
+
+        Log::info('Deleted assignments for new round', [
+            'media_id' => $media->id,
+            'deleted_count' => $deletedCount,
+        ]);
+
+        $assignedCount = $assignmentService->assignMediaToUsers($media);
+
+        Log::info('Reassigned media for new round', [
+            'media_id' => $media->id,
+            'assigned_count' => $assignedCount,
+        ]);
+    }
+
+    private function notifyCampaignCompletion(Media $media, NotificationService $notificationService): void
+    {
+        $uploader = $media->user;
+
+        if (!$uploader) {
+            Log::warning('Uploader not found for campaign completion notification', [
+                'media_id' => $media->id,
+            ]);
+            return;
+        }
+
+        $notificationService->sendCampaignCompletionNotification($uploader, $media);
+
+        Log::info('Campaign completion notification sent', [
+            'media_id' => $media->id,
+            'uploader_id' => $uploader->id,
+        ]);
+    }
+
     public function failed(Throwable $exception): void
     {
         Log::error('ProcessRoundCompletionJob failed permanently', [
-            'media_id' => $this->mediaId,
+            'media_id' => $this->media->id,
             'error' => $exception->getMessage(),
             'trace' => $exception->getTraceAsString()
         ]);

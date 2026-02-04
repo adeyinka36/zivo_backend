@@ -29,7 +29,7 @@ class MediaAssignmentService
             $media->load('locations');
         }
 
-        $targetCount = (int) config('services.media.target_views', 10) + 1;
+        $targetCount = (int) config('services.media.target_views', 10);
         $currentCount = $media->assignments()->count();
         $neededCount = max(0, $targetCount - $currentCount);
 
@@ -102,6 +102,8 @@ class MediaAssignmentService
             
             $selectedUsers = array_merge($selectedUsers, $radiusUsers);
             $excludeUserIds = array_unique(array_merge($excludeUserIds, array_column($radiusUsers, 'id')));
+
+            Log::info('selected--->', $selectedUsers);
         }
 
         if (count($selectedUsers) < $neededCount) {

@@ -125,7 +125,7 @@ class Media extends Model
 
     public function isRoundComplete(int $watchCount): bool
     {
-        return $watchCount > $this->getWatchesPerRound();
+        return $watchCount == $this->getWatchesPerRound();
     }
 
     public function incrementRound(): void

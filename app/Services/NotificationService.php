@@ -169,6 +169,33 @@ class NotificationService
     }
 
     /**
+     * Send campaign completion notification to media uploader
+     */
+    public function sendCampaignCompletionNotification(User $user, Media $media): bool
+    {
+        if (!$this->canSendNotification($user)) {
+            return false;
+        }
+
+        $payload = [
+            'to' => $user->push_token,
+            'title' => '🎉 Campaign Completed!',
+            'body' => 'Your media campaign has completed successfully',
+            'data' => [
+                'type' => 'campaign_completed',
+                'mediaId' => $media->id,
+                'mediaName' => Str::limit($media->description ?? $media->name, 15, '...'),
+                'rounds' => $media->rounds,
+                'screen' => 'profile'
+            ],
+            'sound' => 'default',
+            'badge' => 1
+        ];
+
+        return $this->sendToExpo($payload, $user->id);
+    }
+
+    /**
      * Check if notification can be sent to user
      */
     private function canSendNotification(User $user): bool
