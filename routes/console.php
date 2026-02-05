@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\AssignCurrentMediaJob;
+use App\Jobs\AssignUnassignedMediaJob;
 use App\Jobs\CheckRoundCompletionJob;
 use App\Jobs\CleanupAndReassignMediaJob;
 use App\Jobs\DeleteCompletedCampaignsJob;
@@ -21,3 +22,5 @@ Schedule::job(new DeleteCompletedCampaignsJob)->daily();
 Schedule::job(new AssignCurrentMediaJob)->cron('0 */6 * * *');
 
 Schedule::job(new CheckRoundCompletionJob)->cron('0 */6 * * *');
+
+Schedule::job(new AssignUnassignedMediaJob)->cron('0 */6 * * *');

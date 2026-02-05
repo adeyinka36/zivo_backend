@@ -167,9 +167,11 @@ class MediaAssignmentService
 
             $query->whereRaw(
                 "6371 * acos(
-                    cos(radians(?)) * cos(radians(users.latitude)) *
-                    cos(radians(users.longitude) - radians(?)) +
-                    sin(radians(?)) * sin(radians(users.latitude))
+                    GREATEST(-1, LEAST(1,
+                        cos(radians(?)) * cos(radians(users.latitude)) *
+                        cos(radians(users.longitude) - radians(?)) +
+                        sin(radians(?)) * sin(radians(users.latitude))
+                    ))
                 ) <= ?",
                 [$lat, $lng, $lat, $radiusKm]
             );
@@ -181,9 +183,11 @@ class MediaAssignmentService
 
                     $q->orWhereRaw(
                         "6371 * acos(
-                            cos(radians(?)) * cos(radians(users.latitude)) *
-                            cos(radians(users.longitude) - radians(?)) +
-                            sin(radians(?)) * sin(radians(users.latitude))
+                            GREATEST(-1, LEAST(1,
+                                cos(radians(?)) * cos(radians(users.latitude)) *
+                                cos(radians(users.longitude) - radians(?)) +
+                                sin(radians(?)) * sin(radians(users.latitude))
+                            ))
                         ) <= ?",
                         [$lat, $lng, $lat, $radiusKm]
                     );

@@ -32,12 +32,32 @@ class PlatformController extends Controller
             return [
                 'video_url' => $aboutVideoUrl,
                 'creator_video_url' => $creatorVideoUrl,
-                'description' => config('platform.about_description', 'Welcome to Zivo! A platform where content creators can share their media and viewers can discover new content. Watch videos, answer quizzes, and earn rewards.'),
-                'creator_description' => config('platform.about_creator_description', 'Learn how to create and share your content on Zivo. Upload videos, set rewards, and reach your audience.'),
+                'description' => config('platform.about_description', 'Welcome to Zivo! Pay Attention.'),
+                'creator_description' => config('platform.about_creator_description', 'Learn how to create and share your content on Zivo. Upload videos, set rewards, and get attention.'),
             ];
         });
 
         return response()->json($data);
+    }
+
+    /**
+     * Get media target views configuration value.
+     * This value is cached as it rarely changes.
+     *
+     * @return JsonResponse
+     */
+    public function getTargetViews(): JsonResponse
+    {
+        $cacheKey = 'media_target_views';
+        $cacheDuration = 86400; // 24 hours
+
+        $targetViews = Cache::remember($cacheKey, $cacheDuration, function () {
+            return (int) config('services.media.target_views', 25);
+        });
+
+        return response()->json([
+            'target_views' => $targetViews,
+        ]);
     }
 
     /**

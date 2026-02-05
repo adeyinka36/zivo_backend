@@ -52,7 +52,20 @@ These jobs run automatically on a schedule defined in `routes/console.php`.
   - Continues processing even if individual deletions fail
   - Logs deletion statistics
 
-### 5. media:track-failed-uploads
+### 5. AssignUnassignedMediaJob
+- **Schedule**: Every 6 hours (`0 */6 * * *`)
+- **Purpose**: Assigns users to media that have no assignments
+- **Actions**:
+  - Finds media where:
+    - No UserAssignment records exist
+    - Campaign is not complete
+    - Payment status is 'paid'
+    - Active is true
+    - Media is uploaded (not pending)
+  - Assigns users via `MediaAssignmentService::assignMediaToUsers()`
+  - Logs processing results and handles errors gracefully
+
+### 6. media:track-failed-uploads
 - **Schedule**: Weekly
 - **Purpose**: Tracks failed media uploads
 - **Type**: Artisan command
@@ -228,6 +241,28 @@ For each media:
     - Log deletion result
 ```
 
+### Unassigned Media Flow
+
+```
+AssignUnassignedMediaJob (every 6 hours)
+    ↓
+Finds media with no assignments where:
+    - campaign_completed = false
+    - payment_status = 'paid'
+    - active = true
+    - mime_type != 'pending'
+    - No UserAssignment records exist
+    ↓
+For each media:
+    MediaAssignmentService::assignMediaToUsers()
+        ↓
+    Creates assignments
+        ↓
+    For users without current assignment:
+        - Mark assignment as current = true
+        - SendCurrentMediaNotificationJob (via MediaAssignmentService)
+```
+
 ### Current Assignment Flow
 
 ```
@@ -314,7 +349,7 @@ If answer correct:
 - `ProcessMediaUploadJob` → `GenerateThumbnailJob` → `AssignMediaToUsers` → `SendPushNotificationJob`
 
 ### Independent Jobs (Can run in parallel)
-- `CheckRoundCompletionJob` and `AssignCurrentMediaJob` (both run every 6 hours, independent)
+- `CheckRoundCompletionJob`, `AssignCurrentMediaJob`, and `AssignUnassignedMediaJob` (all run every 6 hours, independent)
 - `CleanupAndReassignMediaJob` and `DeleteCompletedCampaignsJob` (both run daily, independent)
 
 ### Job Dependencies

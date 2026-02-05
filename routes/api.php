@@ -68,6 +68,8 @@ Route::prefix('v1')->group(function () {
             Route::post('result', [MediaController::class, 'processQuizResult'])
                 ->name('quiz.result');
         });
+
+        Route::get('/target-views', [PlatformController::class, 'getTargetViews']);
     });
 
     Route::post('webhooks/stripe', [PaymentController::class, 'webhook']);

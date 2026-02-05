@@ -38,10 +38,10 @@ class RewardAllocationSuccessNotification extends Notification
         return (new MailMessage)
             ->subject('🎁 You\'ve Won a Reward From  Zivo!')
             ->greeting('Congratulations ' . $notifiable->name . '!')
-            ->line('We\'re excited to inform you that you\'ve been selected as a winner and have received a reward.')
+            ->line('We are excited to reward your attention.')
             ->line('**Reward Amount:** ' . $formattedAmount)
             ->line('Your reward has been sent via email. Please check your inbox for details on how to claim it.')
-            ->line('Thank you for being an active member of the Zivo community!')
+            ->line('Thank you for paying attention')
             ->salutation('Best regards, The Zivo Team');
     }
 }
