@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Models\MediaUserWatched;
+use App\Jobs\AssignMediaToUsers;
+use App\Jobs\GenerateThumbnailJob;
+use App\Jobs\SendPushNotificationJob;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
@@ -151,6 +154,48 @@ class Media extends Model
     public function getRouteKeyName()
     {
         return 'id';
+    }
+
+    /**
+     * Boot the model and register event listeners.
+     */
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::updated(function (Media $media) {
+            // Check if media transitioned from pending to processed state
+            $wasPending = $media->getOriginal('path') === 'pending' 
+                && $media->getOriginal('disk') === 'pending';
+            
+            $isProcessed = $media->path !== 'pending' 
+                && $media->disk !== 'pending'
+                && $media->payment_status === 'paid'
+                && $media->active === true;
+
+            // Only dispatch jobs when transitioning from pending to processed
+            if ($wasPending && $isProcessed) {
+                // Generate thumbnail for video media
+                if ($media->mime_type && str_starts_with($media->mime_type, 'video/')) {
+                    GenerateThumbnailJob::dispatch($media->id);
+                }
+
+                // Assign media to users
+                AssignMediaToUsers::dispatch($media->id);
+
+                // Send push notification if user exists
+                if ($media->user_id) {
+                    SendPushNotificationJob::dispatch($media->user_id, $media->id);
+                }
+
+                Log::info('Dependent jobs dispatched after media processing', [
+                    'media_id' => $media->id,
+                    'path' => $media->path,
+                    'disk' => $media->disk,
+                    'payment_status' => $media->payment_status,
+                ]);
+            }
+        });
     }
 
      /**

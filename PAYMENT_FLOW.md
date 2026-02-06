@@ -111,11 +111,17 @@ Backend verifies payment status = "succeeded"
     ↓
 Backend stores media file (S3/local)
     ↓
-Backend dispatches job chain:
-    - ProcessMediaUploadJob
+Backend dispatches ProcessMediaUploadJob
+    ↓
+ProcessMediaUploadJob completes successfully
+    ↓
+ProcessMediaUploadJob dispatches dependent jobs independently:
     - GenerateThumbnailJob (if video)
     - AssignMediaToUsers
     - SendPushNotificationJob
+    
+Note: Dependent jobs only run if ProcessMediaUploadJob succeeds.
+Dependent jobs run independently - if one fails, others continue processing.
     ↓
 Media is live and assigned to users
 ```
@@ -219,11 +225,14 @@ Updates Media record with file metadata
     ↓
 Syncs locations
     ↓
-Dispatches job chain:
-    ProcessMediaUploadJob
-        → GenerateThumbnailJob (if video)
-        → AssignMediaToUsers
-        → SendPushNotificationJob
+Dispatches ProcessMediaUploadJob
+    ↓
+ProcessMediaUploadJob completes successfully
+    ↓
+ProcessMediaUploadJob dispatches dependent jobs independently:
+    GenerateThumbnailJob (if video)
+    AssignMediaToUsers
+    SendPushNotificationJob
     ↓
 Returns success response
     ↓

@@ -47,10 +47,6 @@ class SendPushNotificationJob implements ShouldQueue
 
         $success = $notificationService->sendMediaUploadSuccess($user, $media);
 
-        if (!$success) {
-            throw new \Exception('Failed to send push notification');
-        }
-
         // Send notification to all subscribed users about new media upload
         $notificationService->sendNotificationOfUploadedMediaToSubscribed($user, $media);
     }

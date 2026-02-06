@@ -80,36 +80,44 @@ These jobs are dispatched programmatically in response to user actions or other 
 
 #### 1. ProcessMediaUploadJob
 - **Triggered**: When media is uploaded after payment (`MediaController::uploadAfterPayment`)
-- **Chain Position**: First in chain
+- **Dispatch**: Dispatched from controller
 - **Purpose**: Processes the uploaded media file
 - **Actions**:
   - Stores media metadata
   - Processes questions if provided
+  - Updates media with path, disk, mime_type, and marks as active and payment_status as 'paid'
+  - **Note**: Dependent jobs are dispatched automatically via Media model's `updated` event after the database transaction commits
 
 #### 2. GenerateThumbnailJob
-- **Triggered**: When media is uploaded after payment (if media is a video)
-- **Chain Position**: Second in chain (conditional)
+- **Triggered**: Dispatched by Media model's `updated` event (if media is a video)
+- **Dispatch**: Dispatched from Media model event listener
 - **Purpose**: Generates thumbnail for video media
 - **Condition**: Only dispatched if `mime_type` starts with `video/`
+- **Prerequisites**: Media is already processed (path, disk, mime_type are set and saved to database)
+- **Note**: Runs independently - if it fails, other jobs continue
 
 #### 3. AssignMediaToUsers
-- **Triggered**: When media is uploaded after payment
-- **Chain Position**: Third in chain
+- **Triggered**: Dispatched by Media model's `updated` event
+- **Dispatch**: Dispatched from Media model event listener
 - **Purpose**: Assigns media to users to reach target count
+- **Prerequisites**: Media is already active and payment_status is 'paid' (guaranteed by ProcessMediaUploadJob)
 - **Actions**:
   - Uses `MediaAssignmentService::assignMediaToUsers()`
   - Selects users based on location priority (coordinate-based radius search)
   - Creates `UserAssignment` records
   - Marks assignments as `current = true` if user has no current assignment
   - Dispatches `SendCurrentMediaNotificationJob` for users who received current assignments
+- **Note**: Runs independently - if it fails, other jobs continue
 
 #### 4. SendPushNotificationJob
-- **Triggered**: When media is uploaded after payment
-- **Chain Position**: Last in chain
+- **Triggered**: Dispatched by Media model's `updated` event
+- **Dispatch**: Dispatched from Media model event listener
 - **Purpose**: Sends push notifications about new media upload
+- **Prerequisites**: User and media exist (guaranteed by ProcessMediaUploadJob)
 - **Actions**:
   - Sends upload success notification to creator
   - Sends notification to all subscribed users about new media
+- **Note**: Runs independently - if it fails, other jobs continue
 
 ### Round Completion Flow
 
@@ -179,6 +187,21 @@ These jobs are dispatched programmatically in response to user actions or other 
 - **Event**: `created`
 - **Action**: Increments `view_count` on the related `Media` model
 
+### Media Model Events
+
+#### On Update
+- **Event**: `updated`
+- **Condition**: Media transitions from pending to processed state:
+  - Original `path` was `'pending'` and original `disk` was `'pending'`
+  - New `path` is not `'pending'` and new `disk` is not `'pending'`
+  - `payment_status` is `'paid'`
+  - `active` is `true`
+- **Action**: Dispatches dependent jobs:
+  - `GenerateThumbnailJob` (if `mime_type` starts with `video/`)
+  - `AssignMediaToUsers`
+  - `SendPushNotificationJob` (if `user_id` exists)
+- **Note**: This ensures dependent jobs only run after the database transaction commits and the media is fully processed
+
 ---
 
 ## Job Flow Diagrams
@@ -190,12 +213,25 @@ User uploads media after payment
     ↓
 MediaController::uploadAfterPayment()
     ↓
-Bus::chain([
-    ProcessMediaUploadJob          → Process file & metadata
+ProcessMediaUploadJob::dispatch()
+    ↓
+ProcessMediaUploadJob updates Media record:
+    - path, disk, mime_type, etc.
+    - payment_status = 'paid'
+    - active = true
+    ↓
+Media model's updated event fires (after DB commit)
+    ↓
+Event listener detects transition from pending → processed
+    ↓
+Dispatches dependent jobs independently:
     GenerateThumbnailJob           → Generate thumbnail (if video)
     AssignMediaToUsers             → Assign to users
     SendPushNotificationJob        → Notify creator & subscribers
-])
+    
+Note: Dependent jobs are dispatched via Media model event after database commit.
+This ensures path and disk are saved before dependent jobs run.
+If one dependent job fails, others continue processing.
 ```
 
 ### Round Completion Flow
@@ -345,7 +381,7 @@ If answer correct:
 
 ## Job Dependencies
 
-### Chained Jobs (Must run in order)
+### Independent Jobs (Run in parallel, handle own prerequisites)
 - `ProcessMediaUploadJob` → `GenerateThumbnailJob` → `AssignMediaToUsers` → `SendPushNotificationJob`
 
 ### Independent Jobs (Can run in parallel)
@@ -372,5 +408,7 @@ If answer correct:
 - All scheduled jobs require Laravel's scheduler to be running (`php artisan schedule:run`)
 - Queue workers must be running to process dispatched jobs (`php artisan queue:work`)
 - Model observers run synchronously within the same request/transaction
-- Job chains ensure sequential execution and stop on first failure
+- Jobs are dispatched independently and handle their own prerequisites
+- If one job fails, others continue processing independently
+- Each job checks for required conditions before executing
 - Notifications are only sent to users with `push_notifications = true` and a valid `push_token`

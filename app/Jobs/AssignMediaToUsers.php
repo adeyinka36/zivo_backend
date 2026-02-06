@@ -45,6 +45,17 @@ class AssignMediaToUsers implements ShouldQueue
             return;
         }
 
+        // Check if media is ready for assignment (active and paid)
+        // This allows the job to run independently without blocking on ProcessMediaUploadJob
+        if (!$media->active || $media->payment_status !== 'paid') {
+            Log::info('Media not ready for assignment yet, skipping', [
+                'media_id' => $media->id,
+                'active' => $media->active,
+                'payment_status' => $media->payment_status,
+            ]);
+            return;
+        }
+
         $assignmentService->assignMediaToUsers($media);
     }
 }

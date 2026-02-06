@@ -43,7 +43,7 @@ class ProcessMediaUploadJob implements ShouldQueue
             
             // Check if media is already processed (has proper file info)
             if ($media->payment_status === 'paid' && $media->mime_type !== 'pending' && $media->path !== 'pending') {
-                Log::info('Media already processed, skipping', [
+                Log::info('Media already processed, skipping processing', [
                     'media_id' => $media->id,
                     'payment_status' => $media->payment_status,
                     'mime_type' => $media->mime_type,
@@ -83,6 +83,9 @@ class ProcessMediaUploadJob implements ShouldQueue
             if ($media->user) {
                 $media->user->notify(new MediaUploadSuccessNotification($media));
             }
+
+            // Dependent jobs are dispatched automatically via Media model's updated event
+            // after the database transaction commits
 
         } catch (\Exception $e) {
             Log::error('Failed to process media upload', [

@@ -15,12 +15,8 @@ use App\Http\Resources\MediaResource;
 use App\Http\Resources\MediaListResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
-use App\Jobs\AssignMediaToUsers;
-use App\Jobs\GenerateThumbnailJob;
 use App\Jobs\ProcessMediaUploadJob;
-use App\Jobs\SendPushNotificationJob;
 use App\Services\MediaWatchService;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Collection;
 use App\Models\Media;
 use App\Models\MediaUserWatched;
@@ -160,21 +156,16 @@ class MediaController extends Controller
             }
         }
 
-        $jobs = collect([
-            new ProcessMediaUploadJob($media->id, $path, $disk, $metadata, $request->input('questions', []))
-        ]);
-
-        if (str_starts_with($metadata['mime_type'], 'video/')) {
-            $jobs->push(new GenerateThumbnailJob($media->id));
-        }
-
-        $jobs->push(new AssignMediaToUsers($media->id));
-        $jobs->push(new SendPushNotificationJob($user->id, $media->id));
-
-        Bus::chain($jobs)
-            ->catch( function (Throwable $e) {
-                Log::error($e);
-            })->dispatch();
+        // Dispatch ProcessMediaUploadJob
+        // Dependent jobs are dispatched automatically via Media model's updated event
+        // after the database transaction commits
+        ProcessMediaUploadJob::dispatch(
+            $media->id,
+            $path,
+            $disk,
+            $metadata,
+            $request->input('questions', [])
+        );
 
         return response()->json([
             'message' => 'Media upload initiated successfully'
