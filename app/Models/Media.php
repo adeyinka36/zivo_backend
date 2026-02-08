@@ -12,6 +12,7 @@ use App\Models\MediaUserWatched;
 use App\Jobs\AssignMediaToUsers;
 use App\Jobs\GenerateThumbnailJob;
 use App\Jobs\SendPushNotificationJob;
+use App\Jobs\SendEmailNotificationJob;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
@@ -30,6 +31,7 @@ class Media extends Model
         'path',
         'disk',
         'description',
+        'location_selections',
         'reward',
         'rounds',
         'payment_status',
@@ -52,7 +54,8 @@ class Media extends Model
         'reward' => 'integer',
         'rounds' => 'integer',
         'amount_paid' => 'decimal:2',
-        'paid_at' => 'datetime'
+        'paid_at' => 'datetime',
+        'location_selections' => 'array',
     ];
 
     public function user(): BelongsTo
@@ -176,16 +179,20 @@ class Media extends Model
             // Only dispatch jobs when transitioning from pending to processed
             if ($wasPending && $isProcessed) {
                 // Generate thumbnail for video media
-                if ($media->mime_type && str_starts_with($media->mime_type, 'video/')) {
-                    GenerateThumbnailJob::dispatch($media->id);
-                }
+//                if ($media->mime_type && str_starts_with($media->mime_type, 'video/')) {
+//                    GenerateThumbnailJob::dispatch($media->id)->afterCommit();
+//                }
 
                 // Assign media to users
-                AssignMediaToUsers::dispatch($media->id);
+                AssignMediaToUsers::dispatch($media->id)->afterCommit();
 
-                // Send push notification if user exists
+                // Send notifications if user exists
                 if ($media->user_id) {
-                    SendPushNotificationJob::dispatch($media->user_id, $media->id);
+                    // Send push notification
+                    SendPushNotificationJob::dispatch($media->user_id, $media->id)->afterCommit();
+                    
+                    // Send email notification
+                    SendEmailNotificationJob::dispatch($media->user_id, $media->id)->afterCommit();
                 }
 
                 Log::info('Dependent jobs dispatched after media processing', [

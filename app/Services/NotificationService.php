@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Models\Media;
+use App\Models\UserAssignment;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -18,28 +19,46 @@ class NotificationService
     private const REQUEST_TIMEOUT = 30;
 
     /**
-     * Send notification to all subscribed users about new media upload
+     * Send notification to subscribed users who have been assigned to this media.
      */
     public function sendNotificationOfUploadedMediaToSubscribed(User $uploader, Media $media): bool
     {
-        $subscribedUsers = User::where('push_notifications', true)
+        $assignedUserIds = UserAssignment::where('media_id', $media->id)
+            ->pluck('user_id')
+            ->unique()
+            ->toArray();
+
+        if (empty($assignedUserIds)) {
+            Log::info('No assigned users found for new media notification', [
+                'media_id' => $media->id
+            ]);
+            return true;
+        }
+
+        $assignedUsers = User::whereIn('id', $assignedUserIds)
+            ->where('push_notifications', true)
             ->whereNotNull('push_token')
             ->where('id', '!=', $uploader->id)
             ->get()
             ->unique('push_token')
             ->values();
 
-        if ($subscribedUsers->isEmpty()) {
-            Log::info('No subscribed users found for new media notification');
+        if ($assignedUsers->isEmpty()) {
+            Log::info('No subscribed assigned users found for new media notification', [
+                'media_id' => $media->id,
+                'assigned_user_count' => count($assignedUserIds)
+            ]);
             return true;
         }
 
-        $validUsers = $subscribedUsers->filter(function ($user) {
+        $validUsers = $assignedUsers->filter(function ($user) {
             return $this->canSendNotification($user);
         });
 
         if ($validUsers->isEmpty()) {
-            Log::info('No valid push tokens found for new media notification');
+            Log::info('No valid push tokens found for assigned users', [
+                'media_id' => $media->id
+            ]);
             return true;
         }
 
@@ -59,6 +78,11 @@ class NotificationService
                 'badge' => 1
             ];
         })->toArray();
+
+        Log::info('Sending new media notifications to assigned users', [
+            'media_id' => $media->id,
+            'recipient_count' => count($messages)
+        ]);
 
         return $this->sendBatchToExpo($messages, $media->id, $uploader->id);
     }

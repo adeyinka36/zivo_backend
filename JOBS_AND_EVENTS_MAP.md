@@ -78,9 +78,32 @@ These jobs are dispatched programmatically in response to user actions or other 
 
 ### Media Upload Flow
 
-#### 1. ProcessMediaUploadJob
+#### 1. UploadFileToS3Job
 - **Triggered**: When media is uploaded after payment (`MediaController::uploadAfterPayment`)
-- **Dispatch**: Dispatched from controller
+- **Dispatch**: Dispatched from controller with `afterCommit()`
+- **Purpose**: Uploads media file to S3 and dispatches processing jobs
+- **Actions**:
+  - Uploads file to S3 using streaming (for large files)
+  - Verifies file upload succeeded
+  - Dispatches `ProcessMediaUploadJob` with file metadata
+  - Dispatches `ExpandLocationSelectionsJob` if location selections exist
+  - Cleans up temporary file
+- **Note**: File upload happens asynchronously to avoid blocking the request
+
+#### 2. ExpandLocationSelectionsJob
+- **Triggered**: Dispatched by `UploadFileToS3Job` if location selections exist
+- **Dispatch**: Dispatched from `UploadFileToS3Job` with `afterCommit()`
+- **Purpose**: Expands location selections to individual city locations
+- **Actions**:
+  - Processes location selections (city, country, continent) using batch operations
+  - Creates or finds locations in database using efficient bulk queries
+  - Associates locations with media via `media->locations()->sync()`
+- **Performance**: Uses batch database operations (processes 500 locations per chunk) instead of individual queries
+- **Note**: Runs asynchronously and doesn't block media upload or assignment. Media can be assigned to users even if location expansion is still running.
+
+#### 3. ProcessMediaUploadJob
+- **Triggered**: Dispatched by `UploadFileToS3Job` after file upload completes
+- **Dispatch**: Dispatched from `UploadFileToS3Job` with `afterCommit()`
 - **Purpose**: Processes the uploaded media file
 - **Actions**:
   - Stores media metadata
@@ -88,7 +111,7 @@ These jobs are dispatched programmatically in response to user actions or other 
   - Updates media with path, disk, mime_type, and marks as active and payment_status as 'paid'
   - **Note**: Dependent jobs are dispatched automatically via Media model's `updated` event after the database transaction commits
 
-#### 2. GenerateThumbnailJob
+#### 4. GenerateThumbnailJob
 - **Triggered**: Dispatched by Media model's `updated` event (if media is a video)
 - **Dispatch**: Dispatched from Media model event listener
 - **Purpose**: Generates thumbnail for video media
@@ -96,7 +119,7 @@ These jobs are dispatched programmatically in response to user actions or other 
 - **Prerequisites**: Media is already processed (path, disk, mime_type are set and saved to database)
 - **Note**: Runs independently - if it fails, other jobs continue
 
-#### 3. AssignMediaToUsers
+#### 5. AssignMediaToUsers
 - **Triggered**: Dispatched by Media model's `updated` event
 - **Dispatch**: Dispatched from Media model event listener
 - **Purpose**: Assigns media to users to reach target count
@@ -109,7 +132,7 @@ These jobs are dispatched programmatically in response to user actions or other 
   - Dispatches `SendCurrentMediaNotificationJob` for users who received current assignments
 - **Note**: Runs independently - if it fails, other jobs continue
 
-#### 4. SendPushNotificationJob
+#### 6. SendPushNotificationJob
 - **Triggered**: Dispatched by Media model's `updated` event
 - **Dispatch**: Dispatched from Media model event listener
 - **Purpose**: Sends push notifications about new media upload
@@ -121,7 +144,7 @@ These jobs are dispatched programmatically in response to user actions or other 
 
 ### Round Completion Flow
 
-#### 5. ProcessRoundCompletionJob
+#### 7. ProcessRoundCompletionJob
 - **Triggered**: By `CheckRoundCompletionJob` (scheduled every 6 hours)
 - **Purpose**: Processes a completed round for a media item
 - **Actions**:
@@ -137,26 +160,26 @@ These jobs are dispatched programmatically in response to user actions or other 
 
 ### Quiz Flow
 
-#### 6. AllocateReward
+#### 8. AllocateReward
 - **Triggered**: When user answers quiz correctly (`MediaController::submitQuizResult`)
 - **Purpose**: Allocates reward to user who won the quiz
 - **Condition**: Only dispatched if answer is correct
 
-#### 7. AllocateRewardWithAmount
+#### 9. AllocateRewardWithAmount
 - **Triggered**: When round completes without a winner (`MediaWatchService::allocateRewardsForUnwonRound`)
 - **Purpose**: Allocates reward to randomly selected users
 - **Actions**:
   - Distributes reward among active verified users
   - Dispatched for each winner
 
-#### 8. QuizInvitation
+#### 10. QuizInvitation
 - **Triggered**: By `QuizManager` command (scheduled separately)
 - **Purpose**: Sends quiz invitations for eligible media
 - **Condition**: Media must have been created more than 6 hours ago and have been watched
 
 ### Notification Jobs
 
-#### 9. SendCurrentMediaNotificationJob
+#### 11. SendCurrentMediaNotificationJob
 - **Triggered**: Multiple sources (see [Event Triggers](#event-triggers))
 - **Purpose**: Sends push notification when media becomes current or is removed
 - **Types**:
@@ -213,7 +236,11 @@ User uploads media after payment
     ↓
 MediaController::uploadAfterPayment()
     ↓
-ProcessMediaUploadJob::dispatch()
+UploadFileToS3Job::dispatch() (afterCommit)
+    ↓
+UploadFileToS3Job uploads file to S3 and dispatches:
+    - ProcessMediaUploadJob (afterCommit)
+    - ExpandLocationSelectionsJob (afterCommit, if locations exist)
     ↓
 ProcessMediaUploadJob updates Media record:
     - path, disk, mime_type, etc.
@@ -227,11 +254,19 @@ Event listener detects transition from pending → processed
 Dispatches dependent jobs independently:
     GenerateThumbnailJob           → Generate thumbnail (if video)
     AssignMediaToUsers             → Assign to users
-    SendPushNotificationJob        → Notify creator & subscribers
+    SendPushNotificationJob        → Notify creator
+    SendEmailNotificationJob       → Email creator
     
-Note: Dependent jobs are dispatched via Media model event after database commit.
-This ensures path and disk are saved before dependent jobs run.
-If one dependent job fails, others continue processing.
+ExpandLocationSelectionsJob (runs in parallel):
+    - Expands location selections using batch operations
+    - Creates/finds locations in database (500 per chunk)
+    - Associates locations with media
+    
+Note: 
+- File upload and location expansion happen asynchronously
+- Dependent jobs are dispatched via Media model event after database commit
+- Location expansion doesn't block media assignment (MediaAssignmentService handles empty locations gracefully)
+- If one job fails, others continue processing
 ```
 
 ### Round Completion Flow
@@ -382,13 +417,16 @@ If answer correct:
 ## Job Dependencies
 
 ### Independent Jobs (Run in parallel, handle own prerequisites)
-- `ProcessMediaUploadJob` → `GenerateThumbnailJob` → `AssignMediaToUsers` → `SendPushNotificationJob`
+- `UploadFileToS3Job` → `ProcessMediaUploadJob` → `GenerateThumbnailJob` → `AssignMediaToUsers` → `SendPushNotificationJob` → `SendEmailNotificationJob`
+- `UploadFileToS3Job` → `ExpandLocationSelectionsJob` (runs in parallel with ProcessMediaUploadJob)
 
 ### Independent Jobs (Can run in parallel)
 - `CheckRoundCompletionJob`, `AssignCurrentMediaJob`, and `AssignUnassignedMediaJob` (all run every 6 hours, independent)
 - `CleanupAndReassignMediaJob` and `DeleteCompletedCampaignsJob` (both run daily, independent)
 
 ### Job Dependencies
+- `ProcessMediaUploadJob` depends on `UploadFileToS3Job` (dispatched by it)
+- `ExpandLocationSelectionsJob` depends on `UploadFileToS3Job` (dispatched by it, if locations exist)
 - `ProcessRoundCompletionJob` depends on `CheckRoundCompletionJob` (dispatched by it)
 - `SendCurrentMediaNotificationJob` depends on assignment creation/updates
 - `AllocateReward` depends on quiz submission
@@ -412,3 +450,5 @@ If answer correct:
 - If one job fails, others continue processing independently
 - Each job checks for required conditions before executing
 - Notifications are only sent to users with `push_notifications = true` and a valid `push_token`
+- **Location Processing**: Location expansion uses batch database operations for performance. Large selections (e.g., entire continents) are processed efficiently in chunks of 500 locations, reducing database queries from hundreds to just a few bulk operations.
+- **Location Expansion**: Runs asynchronously and doesn't block media upload or user assignment. If locations aren't expanded yet when `AssignMediaToUsers` runs, it gracefully falls back to general user assignment without location filtering.

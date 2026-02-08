@@ -141,8 +141,8 @@ class MediaService
     public function createDraftMedia(array $data, User $user): Media
     {
         $targetViews = (int) config('services.media.target_views', 10);
-        
-        $media = Media::create([
+
+        return Media::create([
             'user_id' => $user->id,
             'name' => 'Pending Upload',
             'file_name' => 'pending',
@@ -151,20 +151,12 @@ class MediaService
             'path' => 'pending',
             'disk' => 'pending',
             'description' => $data['description'] ?? null,
+            'location_selections' => !empty($data['location_selections']) ? $data['location_selections'] : null,
             'reward' => $data['reward'],
             'rounds' => $data['rounds'],
             'quiz_number' => rand(1, $targetViews),
             'payment_status' => 'pending',
         ]);
-
-        if (!empty($data['location_selections'])) {
-            $locationIds = $this->locationService->expandLocationSelections($data['location_selections']);
-            if (!empty($locationIds)) {
-                $media->locations()->sync($locationIds);
-            }
-        }
-
-        return $media;
     }
 
 

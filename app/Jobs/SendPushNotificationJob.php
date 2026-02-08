@@ -47,8 +47,8 @@ class SendPushNotificationJob implements ShouldQueue
 
         $success = $notificationService->sendMediaUploadSuccess($user, $media);
 
-        // Send notification to all subscribed users about new media upload
-        $notificationService->sendNotificationOfUploadedMediaToSubscribed($user, $media);
+        // Note: Assigned users receive notifications via SendCurrentMediaNotificationJob
+        // when their assignment is marked as current, so we don't send duplicate notifications here.
     }
 
     /**

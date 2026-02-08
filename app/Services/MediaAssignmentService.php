@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Jobs\SendCurrentMediaNotificationJob;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\UserAssignment;
@@ -322,9 +321,7 @@ class MediaAssignmentService
      */
     private function createAssignments(Media $media, array $users): void
     {
-        $currentUserIds = [];
-
-        DB::transaction(function () use ($media, $users, &$currentUserIds) {
+        DB::transaction(function () use ($media, $users) {
             foreach ($users as $userData) {
                 $userId = $userData['id'];
 
@@ -343,61 +340,9 @@ class MediaAssignmentService
                         'current' => $isCurrent,
                     ]
                 );
-
-                if ($isCurrent) {
-                    $currentUserIds[] = $userId;
-                }
             }
         });
-
-        if (!empty($currentUserIds)) {
-            $this->sendAssignmentNotifications($media, $currentUserIds);
-        }
     }
 
-    /**
-     * Send push notifications to users who received current media assignments.
-     *
-     * @param Media $media
-     * @param array $userIds
-     * @return int Number of notifications dispatched
-     */
-    private function sendAssignmentNotifications(Media $media, array $userIds): int
-    {
-        $eligibleUsers = User::whereIn('id', $userIds)
-            ->where('push_notifications', true)
-            ->whereNotNull('push_token')
-            ->get()
-            ->unique('push_token')
-            ->values();
-
-        if ($eligibleUsers->isEmpty()) {
-            Log::info('No eligible users for assignment notifications', [
-                'media_id' => $media->id,
-                'total_assigned' => count($userIds),
-            ]);
-            return 0;
-        }
-
-        $notificationsDispatched = 0;
-
-        foreach ($eligibleUsers as $user) {
-            SendCurrentMediaNotificationJob::dispatch(
-                $user->id,
-                $media->id,
-                'assigned'
-            );
-            $notificationsDispatched++;
-        }
-
-        Log::info('Assignment notifications dispatched', [
-            'media_id' => $media->id,
-            'notifications_dispatched' => $notificationsDispatched,
-            'total_current_assignments' => count($userIds),
-            'unique_tokens' => $notificationsDispatched,
-        ]);
-
-        return $notificationsDispatched;
-    }
 }
 

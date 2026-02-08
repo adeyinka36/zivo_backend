@@ -16,6 +16,7 @@ use App\Http\Resources\MediaListResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
 use App\Jobs\ProcessMediaUploadJob;
+use App\Jobs\UploadFileToS3Job;
 use App\Services\MediaWatchService;
 use Illuminate\Support\Collection;
 use App\Models\Media;
@@ -30,6 +31,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class MediaController extends Controller
@@ -90,7 +92,10 @@ class MediaController extends Controller
     }
 
     /**
-     * Upload media after payment is completed
+     * Upload media after payment is completed.
+     * 
+     * Stores file temporarily and dispatches UploadFileToS3Job for asynchronous processing.
+     * Returns immediately to provide quick response to frontend.
      */
     public function uploadAfterPayment(UploadAfterPaymentRequest $request): JsonResponse
     {
@@ -98,29 +103,13 @@ class MediaController extends Controller
             ->where('status', Payment::STATUS_SUCCEEDED)
             ->firstOrFail();
 
-        $user = $request->user();
-
         $media = $payment->media;
         if (!$media) {
             return response()->json(['error' => 'Media not found'], 404);
         }
 
         $file = $request->file('file');
-        
-        $disk = app()->environment('testing') ? 'public' : 's3';
-        $path = $disk === 's3' ? 'zivo_media/' . $file->hashName() : 'media/' . $file->hashName();
 
-        $file->storeAs(
-            $disk === 's3' ? 'zivo_media' : 'media',
-            $file->hashName(),
-            ['disk' => $disk]
-        );
-
-        // Calculate amounts from Media record (server-side) - don't trust frontend
-        $expectedAmounts = $this->paymentService->calculateExpectedPaymentAmount($media);
-        $totalAmountCents = $expectedAmounts['total_amount_cents'];
-
-        // Verify frontend amounts match Media record (for validation, but don't use them)
         $frontendRewardCents = (int) $request->input('reward');
         $frontendRounds = (int) $request->input('rounds');
         
@@ -137,6 +126,10 @@ class MediaController extends Controller
 
         $targetViews = (int) config('services.media.target_views', 10);
         
+        $tempFileName = uniqid() . '_' . $file->hashName();
+        $tempFilePath = 'temp_uploads/' . $tempFileName;
+        $file->storeAs('temp_uploads', $tempFileName, ['disk' => 'local']);
+
         $metadata = [
             'name' => $file->getClientOriginalName(),
             'file_name' => $file->getClientOriginalName(),
@@ -145,27 +138,16 @@ class MediaController extends Controller
             'description' => $request->input('description') ?? $media->description,
             'reward' => (int) $media->reward,
             'rounds' => (int) $media->rounds,
-            'amount_paid' => $totalAmountCents / 100,
             'quiz_number' => rand(1, $targetViews),
         ];
 
-        if (!empty($request->input('location_selections'))) {
-            $locationIds = $this->locationService->expandLocationSelections($request->input('location_selections'));
-            if (!empty($locationIds)) {
-                $media->locations()->sync($locationIds);
-            }
-        }
-
-        // Dispatch ProcessMediaUploadJob
-        // Dependent jobs are dispatched automatically via Media model's updated event
-        // after the database transaction commits
-        ProcessMediaUploadJob::dispatch(
+        UploadFileToS3Job::dispatch(
             $media->id,
-            $path,
-            $disk,
+            $tempFilePath,
             $metadata,
-            $request->input('questions', [])
-        );
+            $request->input('questions', []),
+            []
+        )->afterCommit();
 
         return response()->json([
             'message' => 'Media upload initiated successfully'

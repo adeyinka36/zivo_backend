@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Models\Media;
-use App\Notifications\MediaUploadSuccessNotification;
 use App\Services\MediaService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -35,6 +34,7 @@ class ProcessMediaUploadJob implements ShouldQueue
 
     /**
      * Execute the job.
+     * @throws \Exception
      */
     public function handle(): void
     {
@@ -51,6 +51,10 @@ class ProcessMediaUploadJob implements ShouldQueue
                     'active' => $media->active
                 ]);
                 return;
+            }
+
+            if (!Storage::disk($this->disk)->exists($this->filePath)) {
+                throw new \Exception("File not found in storage: {$this->filePath} on disk {$this->disk}");
             }
             
             $targetViews = (int) config('services.media.target_views', 10);
@@ -77,19 +81,19 @@ class ProcessMediaUploadJob implements ShouldQueue
 
             Log::info('Media upload processed successfully', [
                 'media_id' => $media->id,
-                'file_path' => $this->filePath
+                'file_path' => $this->filePath,
+                'disk' => $this->disk,
             ]);
 
-            if ($media->user) {
-                $media->user->notify(new MediaUploadSuccessNotification($media));
-            }
-
-            // Dependent jobs are dispatched automatically via Media model's updated event
-            // after the database transaction commits
+            // Email notification is dispatched via Media model's updated event
+            // after the database transaction commits, ensuring upload completion
+            // is not blocked by email notification failures.
 
         } catch (\Exception $e) {
             Log::error('Failed to process media upload', [
                 'media_id' => $this->mediaId,
+                'file_path' => $this->filePath,
+                'disk' => $this->disk,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\MediaUserWatched;
+use App\Models\UserAssignment;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateRewardWithAmount;
 use Illuminate\Support\Collection;
@@ -51,13 +52,30 @@ class MediaWatchService
      */
     private function recordWatch(Media $media, User $user, bool $isEmailVerified): array
     {
+        $hasAssignment = UserAssignment::where('user_id', $user->id)
+            ->where('media_id', $media->id)
+            ->where('current', true)
+            ->exists();
+
+        if (!$hasAssignment) {
+            Log::warning('Watch attempt by unassigned user', [
+                'user_id' => $user->id,
+                'media_id' => $media->id,
+                'email_verified' => $isEmailVerified,
+            ]);
+
+            return [
+                'was_new' => false,
+                'recorded' => false,
+            ];
+        }
+
         $watchRecord = MediaUserWatched::firstOrCreate([
             'user_id' => $user->id,
             'media_id' => $media->id,
         ]);
 
         $wasNewRecord = $watchRecord->wasRecentlyCreated;
-//        $recorded = $isEmailVerified && $wasNewRecord;
 
         return [
             'was_new' => $wasNewRecord,

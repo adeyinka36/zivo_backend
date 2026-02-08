@@ -29,6 +29,20 @@ class UserAssignment extends Model
     {
         parent::boot();
 
+        static::created(function (UserAssignment $assignment) {
+            if ($assignment->current === true) {
+                $user = $assignment->user;
+                
+                if ($user && $user->push_notifications) {
+                    SendCurrentMediaNotificationJob::dispatch(
+                        $assignment->user_id,
+                        $assignment->media_id,
+                        'assigned'
+                    );
+                }
+            }
+        });
+
         static::updated(function (UserAssignment $assignment) {
             if ($assignment->isDirty('current') && $assignment->current === true) {
                 $originalCurrent = $assignment->getOriginal('current');
