@@ -18,12 +18,17 @@ This document explains how payments work across the Zivo platform: backend, web 
 
 ## Overview
 
-Zivo uses **Stripe** as the payment gateway. The payment flow follows a two-phase approach:
+Zivo uses **Stripe** as the payment gateway. The payment flow follows an upload-before-payment approach:
 
-1. **Payment Intent Creation**: User provides metadata (reward amount, rounds, locations, etc.) and a payment intent is created
-2. **Media Upload After Payment**: After successful payment, the actual media file is uploaded
+1. **File Upload & Payment Intent Creation**: User provides metadata and file, file is uploaded to temporary storage and verified, then payment intent is created
+2. **Payment Processing**: User completes payment via Stripe
+3. **Media Processing After Payment**: After successful payment, the pre-uploaded temp file is used for processing
 
-This design ensures payment is completed before processing expensive operations (file storage, media processing, user assignments).
+This design ensures:
+- **File upload completes before payment** - No payment is taken if upload fails
+- **Upload is verified** - File existence is confirmed before payment intent creation
+- **Reliability** - Temp file is preserved for processing after payment
+- **Fallback** - If temp file is missing, file can be re-uploaded (backward compatible)
 
 ### Payment Calculation
 
@@ -73,15 +78,21 @@ The total payment amount is calculated as:
 ### Complete Payment Flow
 
 ```
-User fills form (reward, rounds, locations, questions, description)
+User fills form (reward, rounds, locations, questions, description, file)
     ↓
 User clicks "Pay" button
     ↓
 Frontend validates form
     ↓
-POST /api/media/payment-intent
+POST /api/media/payment-intent (with file as FormData)
     ↓
 Backend creates draft Media record
+    ↓
+Backend uploads file to temp storage (temp_uploads/)
+    ↓
+Backend verifies file exists
+    ↓
+Backend stores temp_file_path in Media record
     ↓
 Backend calculates payment amount (server-side)
     ↓
@@ -103,25 +114,34 @@ Backend updates Payment status to "succeeded"
     ↓
 Frontend polls payment status
     ↓
-When status = "succeeded", frontend uploads media file
+When status = "succeeded", frontend calls upload-after-payment (without file)
     ↓
-POST /api/media/upload-after-payment
+POST /api/media/upload-after-payment (no file sent)
     ↓
 Backend verifies payment status = "succeeded"
     ↓
-Backend stores media file (S3/local)
+Backend checks for temp_file_path in Media record
     ↓
-Backend dispatches ProcessMediaUploadJob
+Backend uses pre-uploaded temp file (or falls back to uploaded file if missing)
     ↓
-ProcessMediaUploadJob completes successfully
+Backend dispatches UploadFileToS3Job
     ↓
-ProcessMediaUploadJob dispatches dependent jobs independently:
+UploadFileToS3Job uploads to S3 and dispatches ProcessMediaUploadJob
+    ↓
+ProcessMediaUploadJob updates Media record (path, disk, payment_status, active)
+    ↓
+Media model's updated event fires
+    ↓
+Dependent jobs dispatched independently:
     - GenerateThumbnailJob (if video)
-    - AssignMediaToUsers
+    - ExpandLocationSelectionsJob (if locations exist)
+    - AssignMediaToUsers (after locations expanded, or directly if no locations)
     - SendPushNotificationJob
+    - SendEmailNotificationJob
     
-Note: Dependent jobs only run if ProcessMediaUploadJob succeeds.
-Dependent jobs run independently - if one fails, others continue processing.
+Note: File upload happens BEFORE payment, ensuring upload completes before payment is taken.
+If upload fails, payment intent is not created (transaction rollback).
+Temp files are cleaned up after 24 hours by CleanupTempUploadsJob.
     ↓
 Media is live and assigned to users
 ```
@@ -131,14 +151,15 @@ Media is live and assigned to users
 ```
 Frontend: CreatePage / CreateScreen
     ↓
-User fills form and clicks "Pay"
+User fills form (including file) and clicks "Pay"
     ↓
 handlePayment() called
     ↓
-PaymentService.createPaymentIntent(metadata)
+PaymentService.createPaymentIntent(metadata, file)
     ↓
 POST /api/media/payment-intent
-    Body: {
+    Body: FormData {
+        file: File (required),
         reward: number,
         rounds: number,
         locations: array,
@@ -148,10 +169,21 @@ POST /api/media/payment-intent
     ↓
 Backend: MediaController::createPaymentIntent()
     ↓
+Validates request (file max 5GB, formats, etc.)
+    ↓
 MediaService::createDraftMedia()
     - Creates Media record with metadata
     - Sets mime_type = 'pending'
     - Sets size = 0
+    ↓
+Uploads file to temp storage:
+    - Stores in temp_uploads/ directory
+    - Generates unique filename
+    - Verifies file was stored successfully
+    ↓
+Updates Media record:
+    - temp_file_path = path to temp file
+    - name, file_name, mime_type, size from uploaded file
     ↓
 PaymentService::createPaymentIntent()
     - Checks for existing pending payment
@@ -163,6 +195,8 @@ PaymentService::createPaymentIntent()
 Frontend receives response
     ↓
 Frontend navigates to payment screen/modal
+    ↓
+Note: If file upload fails, transaction rolls back and payment intent is not created
 ```
 
 ### Payment Processing Flow
@@ -196,14 +230,14 @@ Frontend: PaymentScreen / CreatePage
     ↓
 Payment status = "succeeded"
     ↓
-uploadMediaAfterPayment() called
+uploadMediaAfterPayment() called (without file)
     ↓
-PaymentService.uploadAfterPayment()
+PaymentService.uploadAfterPayment() (file is undefined/optional)
     ↓
 POST /api/media/upload-after-payment
     Body: FormData {
         payment_id: string,
-        file: File,
+        file: File (optional - only if not pre-uploaded),
         reward: number,
         rounds: number,
         description: string,
@@ -217,22 +251,33 @@ Verifies Payment status = "succeeded"
     ↓
 Retrieves Media record from Payment
     ↓
-Stores file to S3/local storage
+Checks if temp_file_path exists and file exists on disk
+    ↓
+If temp file exists:
+    - Uses pre-uploaded temp file
+    - Uses metadata from Media record (name, mime_type, size)
+    ↓
+If temp file missing (fallback):
+    - Requires file in request
+    - Uploads file to temp storage
+    - Uses metadata from uploaded file
     ↓
 Verifies amounts match Media record (security check)
     ↓
-Updates Media record with file metadata
+Dispatches UploadFileToS3Job (with temp file path)
     ↓
-Syncs locations
+UploadFileToS3Job uploads to S3 and dispatches ProcessMediaUploadJob
     ↓
-Dispatches ProcessMediaUploadJob
+ProcessMediaUploadJob updates Media record (path, disk, payment_status, active)
     ↓
-ProcessMediaUploadJob completes successfully
+Media model's updated event fires
     ↓
-ProcessMediaUploadJob dispatches dependent jobs independently:
-    GenerateThumbnailJob (if video)
-    AssignMediaToUsers
-    SendPushNotificationJob
+Dependent jobs dispatched independently:
+    - GenerateThumbnailJob (if video)
+    - ExpandLocationSelectionsJob (if locations exist)
+    - AssignMediaToUsers (after locations expanded)
+    - SendPushNotificationJob
+    - SendEmailNotificationJob
     ↓
 Returns success response
     ↓
@@ -317,14 +362,20 @@ Frontend navigates to profile page
 #### Payment-Related Endpoints
 
 1. **`POST /api/media/payment-intent`**
+   - Accepts file as FormData (optional but recommended)
+   - Uploads file to temp storage if provided
+   - Verifies file exists before creating payment intent
+   - Creates draft Media record with temp_file_path
    - Creates payment intent
-   - Creates draft Media record
    - Returns `client_secret` and `payment_id`
+   - **Note**: If file upload fails, transaction rolls back and payment intent is not created
 
 2. **`POST /api/media/upload-after-payment`**
-   - Handles media upload after payment
-   - Verifies payment status
-   - Stores file and dispatches jobs
+   - Handles media processing after payment
+   - Verifies payment status = "succeeded"
+   - Uses pre-uploaded temp file if available (from createPaymentIntent)
+   - Falls back to uploaded file if temp file is missing (backward compatible)
+   - Dispatches UploadFileToS3Job for async processing
 
 ### Security Measures
 
@@ -358,13 +409,16 @@ Frontend navigates to profile page
 
 #### Methods
 
-1. **`createPaymentIntent(metadata: PaymentMetadata)`**
+1. **`createPaymentIntent(metadata: PaymentMetadata, file?: File)`**
    - POST `/api/media/payment-intent`
+   - Sends file as FormData if provided
    - Returns: `{ client_secret, payment_id }`
+   - File is uploaded to temp storage before payment intent creation
 
 2. **`uploadAfterPayment(request: UploadAfterPaymentRequest)`**
    - POST `/api/media/upload-after-payment`
-   - Uses FormData for file upload
+   - File is optional (uses pre-uploaded temp file if available)
+   - Uses FormData if file is provided (fallback only)
 
 3. **`pollPaymentStatus(paymentId: string)`**
    - GET `/api/payments/{paymentId}/status`

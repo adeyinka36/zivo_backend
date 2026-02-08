@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\AssignMediaToUsers;
 use App\Models\Media;
 use App\Services\LocationService;
 use Illuminate\Bus\Queueable;
@@ -46,9 +47,16 @@ class ExpandLocationSelectionsJob implements ShouldQueue
             }
 
             if (empty($this->locationSelections)) {
-                Log::info('No location selections to expand', [
+                Log::info('No location selections to expand, dispatching AssignMediaToUsers directly', [
                     'media_id' => $this->mediaId,
                 ]);
+                
+                $media->refresh();
+                
+                if ($media->active && $media->payment_status === 'paid') {
+                    AssignMediaToUsers::dispatch($media->id)->afterCommit();
+                }
+                
                 return;
             }
 
@@ -60,14 +68,42 @@ class ExpandLocationSelectionsJob implements ShouldQueue
             $locationIds = $locationService->expandLocationSelections($this->locationSelections);
 
             if (!empty($locationIds)) {
-                $media->locations()->sync($locationIds);
+                $existingLocationIds = $media->locations()->pluck('locations.id')->toArray();
+                $newLocationIds = array_values(array_diff($locationIds, $existingLocationIds));
+
+                if (!empty($newLocationIds)) {
+                    try {
+                        $media->locations()->attach($newLocationIds);
+                    } catch (\Exception $e) {
+                        if (str_contains($e->getMessage(), 'duplicate key') || str_contains($e->getMessage(), 'Unique violation')) {
+                            Log::warning('Some locations already exist, skipping duplicates', [
+                                'media_id' => $this->mediaId,
+                                'attempted_location_ids' => $newLocationIds,
+                            ]);
+                        } else {
+                            throw $e;
+                        }
+                    }
+                }
 
                 Log::info('Location expansion completed', [
                     'media_id' => $this->mediaId,
                     'location_count' => count($locationIds),
+                    'new_locations' => count($newLocationIds),
+                    'existing_locations' => count($existingLocationIds),
                 ]);
             } else {
                 Log::warning('No locations found after expansion', [
+                    'media_id' => $this->mediaId,
+                ]);
+            }
+
+            $media->refresh();
+
+            if ($media->active && $media->payment_status === 'paid') {
+                AssignMediaToUsers::dispatch($media->id)->afterCommit();
+
+                Log::info('AssignMediaToUsers dispatched after location expansion', [
                     'media_id' => $this->mediaId,
                 ]);
             }

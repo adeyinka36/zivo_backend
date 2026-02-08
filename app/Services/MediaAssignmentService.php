@@ -195,6 +195,7 @@ class MediaAssignmentService
         }
 
         return $query
+            ->inRandomOrder()
             ->limit($limit)
             ->get()
             ->toArray();
@@ -260,6 +261,7 @@ class MediaAssignmentService
         return User::whereNotNull('email_verified_at')
             ->whereIn('location_id', $locationIds)
             ->whereNotIn('id', $excludeUserIds)
+            ->inRandomOrder()
             ->limit($limit)
             ->get()
             ->toArray();
@@ -274,7 +276,9 @@ class MediaAssignmentService
      */
     private function getUsers(int $limit, array $excludeUserIds): array
     {
-        return User::whereNotIn('id', $excludeUserIds)
+        return User::whereNotNull('email_verified_at')
+            ->whereNotIn('id', $excludeUserIds)
+            ->inRandomOrder()
             ->limit($limit)
             ->get()
             ->toArray();

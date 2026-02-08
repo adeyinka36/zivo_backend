@@ -13,6 +13,21 @@ class CreatePaymentIntentRequest extends FormRequest
 
     public function rules(): array
     {
+        $imageFormats = [
+            'jpeg', 'jpg', 'png', 'gif', 'bmp', 'tiff', 'tif', 'webp', 'svg', 'ico',
+            'heic', 'heif', 'avif', 'jp2', 'j2k', 'jpf', 'jpm', 'jpg2', 'j2c',
+            'jpc', 'jpx', 'mj2'
+        ];
+
+        $videoFormats = [
+            'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', 'm4v', 'mpg', 'mpeg',
+            'mp2', 'mpe', 'mpv', 'm2v', '3gp', '3g2', 'f4v', 'f4p', 'f4a', 'f4b',
+            'asf', 'rm', 'rmvb', 'vob', 'ogv', 'drc', 'mng', 'qt', 'yuv', 'mts',
+            'm2ts', 'ts', 'viv', 'amv', 'roq', 'nsv', 'svi', 'mxf', 'divx', 'xvid'
+        ];
+
+        $allFormats = array_merge($imageFormats, $videoFormats);
+
         return [
             'description' => 'nullable|string|max:1000',
             'reward' => 'required|integer|min:100|max:1000000',
@@ -23,6 +38,12 @@ class CreatePaymentIntentRequest extends FormRequest
             'location_selections' => 'nullable|array',
             'location_selections.*.type' => 'required|string|in:city,country,continent',
             'location_selections.*.identifier' => 'required|string',
+            'file' => [
+                'nullable',
+                'file',
+                'max:5368709120',
+                'mimes:' . implode(',', $allFormats)
+            ],
         ];
     }
 
@@ -48,6 +69,11 @@ class CreatePaymentIntentRequest extends FormRequest
             'questions.*.answer.required' => 'Correct answer is required.',
             'questions.*.answer.max' => 'Answer cannot exceed 19 characters.',
             'questions.*.answer.regex' => 'Answer may only contain letters and numbers without spaces.',
+            
+            'file.nullable' => 'File is optional.',
+            'file.file' => 'The uploaded file is invalid.',
+            'file.max' => 'The file size must not exceed 5GB.',
+            'file.mimes' => 'The file must be a valid image or video format.',
         ];
     }
 } 

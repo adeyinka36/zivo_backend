@@ -4,6 +4,7 @@ use App\Jobs\AssignCurrentMediaJob;
 use App\Jobs\AssignUnassignedMediaJob;
 use App\Jobs\CheckRoundCompletionJob;
 use App\Jobs\CleanupAndReassignMediaJob;
+use App\Jobs\CleanupTempUploadsJob;
 use App\Jobs\DeleteCompletedCampaignsJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -24,3 +25,5 @@ Schedule::job(new AssignCurrentMediaJob)->cron('0 */6 * * *');
 Schedule::job(new CheckRoundCompletionJob)->cron('0 */6 * * *');
 
 Schedule::job(new AssignUnassignedMediaJob)->cron('0 */6 * * *');
+
+Schedule::job(new CleanupTempUploadsJob)->hourly();

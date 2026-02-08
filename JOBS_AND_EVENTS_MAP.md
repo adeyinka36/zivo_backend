@@ -70,6 +70,16 @@ These jobs run automatically on a schedule defined in `routes/console.php`.
 - **Purpose**: Tracks failed media uploads
 - **Type**: Artisan command
 
+### 7. CleanupTempUploadsJob
+- **Schedule**: Hourly
+- **Purpose**: Cleans up old temporary upload files
+- **Actions**:
+  - Scans `temp_uploads/` directory
+  - Deletes files older than 24 hours
+  - Logs cleanup statistics (deleted, kept, errors)
+  - Prevents disk space issues while preserving files needed for recent payments
+- **Note**: Files are kept for 24 hours to ensure they're available even if payment is delayed
+
 ---
 
 ## Dispatched Jobs
@@ -97,9 +107,11 @@ These jobs are dispatched programmatically in response to user actions or other 
 - **Actions**:
   - Processes location selections (city, country, continent) using batch operations
   - Creates or finds locations in database using efficient bulk queries
-  - Associates locations with media via `media->locations()->sync()`
+  - Associates locations with media (using `attach()` for new locations, `syncWithoutDetaching()` for existing to avoid duplicate key errors)
+  - Dispatches `AssignMediaToUsers` after locations are synced (ensures locations are available for assignment)
+  - If no location selections exist, dispatches `AssignMediaToUsers` directly
 - **Performance**: Uses batch database operations (processes 500 locations per chunk) instead of individual queries
-- **Note**: Runs asynchronously and doesn't block media upload or assignment. Media can be assigned to users even if location expansion is still running.
+- **Note**: Dispatches `AssignMediaToUsers` after locations are synced to ensure location-based assignment works correctly
 
 #### 3. ProcessMediaUploadJob
 - **Triggered**: Dispatched by `UploadFileToS3Job` after file upload completes
@@ -232,9 +244,25 @@ These jobs are dispatched programmatically in response to user actions or other 
 ### Media Upload Flow
 
 ```
-User uploads media after payment
+User uploads file and creates payment intent
     ↓
-MediaController::uploadAfterPayment()
+MediaController::createPaymentIntent() (with file)
+    ↓
+File uploaded to temp storage (temp_uploads/)
+    ↓
+File existence verified
+    ↓
+temp_file_path stored in Media record
+    ↓
+Payment intent created
+    ↓
+User completes payment
+    ↓
+MediaController::uploadAfterPayment() (without file)
+    ↓
+Checks for temp_file_path in Media record
+    ↓
+Uses pre-uploaded temp file (or falls back to uploaded file)
     ↓
 UploadFileToS3Job::dispatch() (afterCommit)
     ↓
@@ -253,19 +281,23 @@ Event listener detects transition from pending → processed
     ↓
 Dispatches dependent jobs independently:
     GenerateThumbnailJob           → Generate thumbnail (if video)
-    AssignMediaToUsers             → Assign to users
+    AssignMediaToUsers             → Assign to users (only if no location selections)
     SendPushNotificationJob        → Notify creator
     SendEmailNotificationJob       → Email creator
     
 ExpandLocationSelectionsJob (runs in parallel):
     - Expands location selections using batch operations
     - Creates/finds locations in database (500 per chunk)
-    - Associates locations with media
+    - Associates locations with media (using attach for new locations)
+    - Dispatches AssignMediaToUsers after locations are synced
     
 Note: 
-- File upload and location expansion happen asynchronously
-- Dependent jobs are dispatched via Media model event after database commit
-- Location expansion doesn't block media assignment (MediaAssignmentService handles empty locations gracefully)
+- File upload happens BEFORE payment, ensuring upload completes before payment is taken
+- If upload fails, payment intent is not created (transaction rollback)
+- Temp files are cleaned up after 24 hours by CleanupTempUploadsJob
+- If location selections exist: ExpandLocationSelectionsJob dispatches AssignMediaToUsers after locations are synced
+- If no location selections: Media model event dispatches AssignMediaToUsers directly
+- This ensures locations are available when AssignMediaToUsers runs
 - If one job fails, others continue processing
 ```
 
@@ -418,11 +450,11 @@ If answer correct:
 
 ### Independent Jobs (Run in parallel, handle own prerequisites)
 - `UploadFileToS3Job` → `ProcessMediaUploadJob` → `GenerateThumbnailJob` → `AssignMediaToUsers` → `SendPushNotificationJob` → `SendEmailNotificationJob`
-- `UploadFileToS3Job` → `ExpandLocationSelectionsJob` (runs in parallel with ProcessMediaUploadJob)
-
+- `UploadFileToS3Job` → `ExpandLocationSelectionsJob` → `AssignMediaToUsers` (runs after locations expanded)
 ### Independent Jobs (Can run in parallel)
 - `CheckRoundCompletionJob`, `AssignCurrentMediaJob`, and `AssignUnassignedMediaJob` (all run every 6 hours, independent)
 - `CleanupAndReassignMediaJob` and `DeleteCompletedCampaignsJob` (both run daily, independent)
+- `CleanupTempUploadsJob` (runs hourly, independent)
 
 ### Job Dependencies
 - `ProcessMediaUploadJob` depends on `UploadFileToS3Job` (dispatched by it)

@@ -29,6 +29,7 @@ class Media extends Model
         'mime_type',
         'size',
         'path',
+        'temp_file_path',
         'disk',
         'description',
         'location_selections',
@@ -183,8 +184,13 @@ class Media extends Model
 //                    GenerateThumbnailJob::dispatch($media->id)->afterCommit();
 //                }
 
-                // Assign media to users
-                AssignMediaToUsers::dispatch($media->id)->afterCommit();
+                // Assign media to users only if no location selections exist
+                // If location selections exist, ExpandLocationSelectionsJob will dispatch AssignMediaToUsers
+                $hasLocationSelections = !empty($media->location_selections);
+                
+                if (!$hasLocationSelections) {
+                    AssignMediaToUsers::dispatch($media->id)->afterCommit();
+                }
 
                 // Send notifications if user exists
                 if ($media->user_id) {
@@ -200,6 +206,7 @@ class Media extends Model
                     'path' => $media->path,
                     'disk' => $media->disk,
                     'payment_status' => $media->payment_status,
+                    'has_location_selections' => $hasLocationSelections,
                 ]);
             }
         });

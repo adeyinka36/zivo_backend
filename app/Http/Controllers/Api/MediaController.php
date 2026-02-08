@@ -69,7 +69,10 @@ class MediaController extends Controller
     }
 
     /**
-     * Create payment intent with metadata only (no file upload)
+     * Create payment intent with optional file upload.
+     * 
+     * If file is provided, uploads and verifies it before creating payment intent.
+     * This ensures upload completes before payment is taken.
      */
     public function createPaymentIntent(CreatePaymentIntentRequest $request): JsonResponse
     {
@@ -78,6 +81,37 @@ class MediaController extends Controller
             $user = $request->user();
 
             $media = $this->mediaService->createDraftMedia($data, $user);
+
+            $file = $request->file('file');
+            $tempFilePath = null;
+
+            if ($file) {
+                $targetViews = (int) config('services.media.target_views', 10);
+                
+                $tempFileName = uniqid() . '_' . $file->hashName();
+                $tempFilePath = 'temp_uploads/' . $tempFileName;
+                
+                $stored = $file->storeAs('temp_uploads', $tempFileName, ['disk' => 'local']);
+                
+                if (!$stored || !Storage::disk('local')->exists($tempFilePath)) {
+                    throw new \Exception('Failed to store file temporarily');
+                }
+
+                $media->update([
+                    'temp_file_path' => $tempFilePath,
+                    'name' => $file->getClientOriginalName(),
+                    'file_name' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'size' => $file->getSize(),
+                ]);
+
+                Log::info('File uploaded before payment intent creation', [
+                    'media_id' => $media->id,
+                    'temp_file_path' => $tempFilePath,
+                    'file_size' => $file->getSize(),
+                    'mime_type' => $file->getMimeType(),
+                ]);
+            }
 
             $paymentResult = $this->paymentService->createPaymentIntent($media, $user);
 
@@ -94,7 +128,8 @@ class MediaController extends Controller
     /**
      * Upload media after payment is completed.
      * 
-     * Stores file temporarily and dispatches UploadFileToS3Job for asynchronous processing.
+     * Uses temp file if it was uploaded before payment, otherwise uses uploaded file.
+     * Dispatches UploadFileToS3Job for asynchronous processing.
      * Returns immediately to provide quick response to frontend.
      */
     public function uploadAfterPayment(UploadAfterPaymentRequest $request): JsonResponse
@@ -107,8 +142,6 @@ class MediaController extends Controller
         if (!$media) {
             return response()->json(['error' => 'Media not found'], 404);
         }
-
-        $file = $request->file('file');
 
         $frontendRewardCents = (int) $request->input('reward');
         $frontendRounds = (int) $request->input('rounds');
@@ -125,21 +158,49 @@ class MediaController extends Controller
         }
 
         $targetViews = (int) config('services.media.target_views', 10);
-        
-        $tempFileName = uniqid() . '_' . $file->hashName();
-        $tempFilePath = 'temp_uploads/' . $tempFileName;
-        $file->storeAs('temp_uploads', $tempFileName, ['disk' => 'local']);
+        $tempFilePath = null;
+        $metadata = [];
 
-        $metadata = [
-            'name' => $file->getClientOriginalName(),
-            'file_name' => $file->getClientOriginalName(),
-            'mime_type' => $file->getMimeType(),
-            'size' => $file->getSize(),
-            'description' => $request->input('description') ?? $media->description,
-            'reward' => (int) $media->reward,
-            'rounds' => (int) $media->rounds,
-            'quiz_number' => rand(1, $targetViews),
-        ];
+        if ($media->temp_file_path && Storage::disk('local')->exists($media->temp_file_path)) {
+            $tempFilePath = $media->temp_file_path;
+            
+            $metadata = [
+                'name' => $media->name,
+                'file_name' => $media->file_name,
+                'mime_type' => $media->mime_type,
+                'size' => $media->size,
+                'description' => $request->input('description') ?? $media->description,
+                'reward' => (int) $media->reward,
+                'rounds' => (int) $media->rounds,
+                'quiz_number' => rand(1, $targetViews),
+            ];
+
+            Log::info('Using pre-uploaded file for media processing', [
+                'media_id' => $media->id,
+                'temp_file_path' => $tempFilePath,
+            ]);
+        } else {
+            $file = $request->file('file');
+            
+            if (!$file) {
+                return response()->json(['error' => 'File is required'], 400);
+            }
+
+            $tempFileName = uniqid() . '_' . $file->hashName();
+            $tempFilePath = 'temp_uploads/' . $tempFileName;
+            $file->storeAs('temp_uploads', $tempFileName, ['disk' => 'local']);
+
+            $metadata = [
+                'name' => $file->getClientOriginalName(),
+                'file_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize(),
+                'description' => $request->input('description') ?? $media->description,
+                'reward' => (int) $media->reward,
+                'rounds' => (int) $media->rounds,
+                'quiz_number' => rand(1, $targetViews),
+            ];
+        }
 
         UploadFileToS3Job::dispatch(
             $media->id,
@@ -148,6 +209,10 @@ class MediaController extends Controller
             $request->input('questions', []),
             []
         )->afterCommit();
+
+        if ($media->temp_file_path) {
+            $media->update(['temp_file_path' => null]);
+        }
 
         return response()->json([
             'message' => 'Media upload initiated successfully'
