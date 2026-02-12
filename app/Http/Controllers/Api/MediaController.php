@@ -15,6 +15,7 @@ use App\Http\Resources\MediaResource;
 use App\Http\Resources\MediaListResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
+use App\Jobs\ExpandLocationSelectionsJob;
 use App\Jobs\ProcessMediaUploadJob;
 use App\Jobs\UploadFileToS3Job;
 use App\Services\MediaWatchService;
@@ -206,9 +207,11 @@ class MediaController extends Controller
             $media->id,
             $tempFilePath,
             $metadata,
-            $request->input('questions', []),
-            []
+            $request->input('questions', [])
         )->afterCommit();
+
+        // Note: ExpandLocationSelectionsJob is now dispatched by ProcessMediaUploadJob
+        // after media processing succeeds, ensuring proper sequencing
 
         if ($media->temp_file_path) {
             $media->update(['temp_file_path' => null]);

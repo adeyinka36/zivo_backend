@@ -268,12 +268,14 @@ UploadFileToS3Job::dispatch() (afterCommit)
     ↓
 UploadFileToS3Job uploads file to S3 and dispatches:
     - ProcessMediaUploadJob (afterCommit)
-    - ExpandLocationSelectionsJob (afterCommit, if locations exist)
     ↓
 ProcessMediaUploadJob updates Media record:
     - path, disk, mime_type, etc.
     - payment_status = 'paid'
     - active = true
+    ↓
+ProcessMediaUploadJob dispatches (if location_selections exist):
+    - ExpandLocationSelectionsJob (afterCommit)
     ↓
 Media model's updated event fires (after DB commit)
     ↓
@@ -285,7 +287,7 @@ Dispatches dependent jobs independently:
     SendPushNotificationJob        → Notify creator
     SendEmailNotificationJob       → Email creator
     
-ExpandLocationSelectionsJob (runs in parallel):
+ExpandLocationSelectionsJob (runs after ProcessMediaUploadJob succeeds):
     - Expands location selections using batch operations
     - Creates/finds locations in database (500 per chunk)
     - Associates locations with media (using attach for new locations)
@@ -295,6 +297,8 @@ Note:
 - File upload happens BEFORE payment, ensuring upload completes before payment is taken
 - If upload fails, payment intent is not created (transaction rollback)
 - Temp files are cleaned up after 24 hours by CleanupTempUploadsJob
+- ExpandLocationSelectionsJob is dispatched by ProcessMediaUploadJob after media processing succeeds
+- This ensures location expansion only happens after media is fully processed and payment_status is 'paid'
 - If location selections exist: ExpandLocationSelectionsJob dispatches AssignMediaToUsers after locations are synced
 - If no location selections: Media model event dispatches AssignMediaToUsers directly
 - This ensures locations are available when AssignMediaToUsers runs
@@ -458,7 +462,7 @@ If answer correct:
 
 ### Job Dependencies
 - `ProcessMediaUploadJob` depends on `UploadFileToS3Job` (dispatched by it)
-- `ExpandLocationSelectionsJob` depends on `UploadFileToS3Job` (dispatched by it, if locations exist)
+- `ExpandLocationSelectionsJob` depends on `ProcessMediaUploadJob` (dispatched by it after successful media processing, if locations exist)
 - `ProcessRoundCompletionJob` depends on `CheckRoundCompletionJob` (dispatched by it)
 - `SendCurrentMediaNotificationJob` depends on assignment creation/updates
 - `AllocateReward` depends on quiz submission

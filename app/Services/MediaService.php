@@ -163,27 +163,44 @@ class MediaService
     /**
      * Create questions for media
      */
-    public function createQuestions(Media $media, array $questions): void
+    public function createQuestions(Media $media, ?array $questions = null): void
     {
         if ($media->questions()->exists()) {
             return;
         }
 
-        foreach ($questions as $questionData) {
-            $answerWord = strtolower(trim($questionData['answer']));
-            $options = $this->generateOptions($answerWord);
-            
-            $media->questions()->create([
-                'question' => $questionData['question'],
-                'answer' => $options['correct_option'],
-                'option_a' => $options['options'][0],
-                'option_b' => $options['options'][1],
-                'option_c' => $options['options'][2],
-                'option_d' => $options['options'][3],
-            ]);
+        $validQuestions = [];
+        if (!empty($questions) && is_array($questions)) {
+            foreach ($questions as $questionData) {
+                if (
+                    isset($questionData['question']) && 
+                    isset($questionData['answer']) &&
+                    !empty(trim($questionData['question'])) &&
+                    !empty(trim($questionData['answer']))
+                ) {
+                    $validQuestions[] = [
+                        'question' => trim($questionData['question']),
+                        'answer' => trim($questionData['answer']),
+                    ];
+                }
+            }
         }
 
-        if (empty($questions)) {
+        if (!empty($validQuestions)) {
+            foreach ($validQuestions as $questionData) {
+                $answerWord = strtolower($questionData['answer']);
+                $options = $this->generateOptions($answerWord);
+                
+                $media->questions()->create([
+                    'question' => $questionData['question'],
+                    'answer' => $options['correct_option'],
+                    'option_a' => $options['options'][0],
+                    'option_b' => $options['options'][1],
+                    'option_c' => $options['options'][2],
+                    'option_d' => $options['options'][3],
+                ]);
+            }
+        } else {
             $options = $this->generateOptions('zivo');
             $media->questions()->create([
                 'question' => 'What is this platform?',

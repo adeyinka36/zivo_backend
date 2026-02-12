@@ -42,6 +42,8 @@ class ProfileService
     {
         return Media::with('user')
             ->where('user_id', $user->id)
+            ->where('mime_type', '!=', 'pending') // Exclude pending uploads
+            ->where('path', '!=', 'pending') // Exclude pending uploads
             ->orderBy('created_at', 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
     }

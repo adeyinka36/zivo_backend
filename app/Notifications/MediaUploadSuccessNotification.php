@@ -46,6 +46,8 @@ class MediaUploadSuccessNotification extends Notification
             ->line('• **Reward:** ' . $rewardAmount)
             ->line('• **Rounds:** ' . $this->media->rounds)
             ->line('Your media is now available for viewers to watch and engage with.')
+            ->line('**Next Steps:**')
+            ->line('To track your upload and view its performance, please refresh the profile page and check the "My Uploads" section in your profile. You\'ll be able to see all your uploaded media and monitor their progress there.')
             ->line('Thank you for sharing your content with the Zivo community.')
             ->salutation('Best regards, The Zivo Team');
     }

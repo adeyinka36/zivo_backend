@@ -6,6 +6,7 @@ use App\Models\Media;
 use App\Models\MediaUserWatched;
 use App\Models\User;
 use App\Models\UserAssignment;
+use App\Jobs\SendCampaignCompletionEmailJob;
 use App\Services\MediaAssignmentService;
 use App\Services\MediaWatchService;
 use App\Services\NotificationService;
@@ -103,9 +104,13 @@ class ProcessRoundCompletionJob implements ShouldQueue
             return;
         }
 
+        // Send push notification
         $notificationService->sendCampaignCompletionNotification($uploader, $media);
 
-        Log::info('Campaign completion notification sent', [
+        // Send email notification asynchronously
+        SendCampaignCompletionEmailJob::dispatch($uploader->id, $media->id)->afterCommit();
+
+        Log::info('Campaign completion notifications sent', [
             'media_id' => $media->id,
             'uploader_id' => $uploader->id,
         ]);

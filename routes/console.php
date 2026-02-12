@@ -20,10 +20,10 @@ Schedule::job(new CleanupAndReassignMediaJob)->daily();
 
 Schedule::job(new DeleteCompletedCampaignsJob)->daily();
 
-Schedule::job(new AssignCurrentMediaJob)->cron('0 */6 * * *');
+Schedule::job(new AssignCurrentMediaJob)->cron('0 */2 * * *');
 
-Schedule::job(new CheckRoundCompletionJob)->cron('0 */6 * * *');
+Schedule::job(new CheckRoundCompletionJob)->cron('0 */3 * * *');
 
-Schedule::job(new AssignUnassignedMediaJob)->cron('0 */6 * * *');
+Schedule::job(new AssignUnassignedMediaJob)->cron('0 */1 * * *');
 
 Schedule::job(new CleanupTempUploadsJob)->hourly();

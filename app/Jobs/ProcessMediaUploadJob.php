@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\ExpandLocationSelectionsJob;
 use App\Models\Media;
 use App\Services\MediaService;
 use Illuminate\Bus\Queueable;
@@ -13,6 +14,19 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
+/**
+ * Job to process media upload after file has been uploaded to storage.
+ * 
+ * This job updates the media record with file information, creates questions,
+ * and dispatches ExpandLocationSelectionsJob if location selections exist.
+ * 
+ * Flow:
+ * 1. Verifies file exists in storage
+ * 2. Updates media record with file metadata and sets payment_status to 'paid'
+ * 3. Creates quiz questions for the media
+ * 4. Dispatches ExpandLocationSelectionsJob if location_selections exist
+ * 5. Media model's updated event dispatches other dependent jobs (notifications, etc.)
+ */
 class ProcessMediaUploadJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -24,6 +38,15 @@ class ProcessMediaUploadJob implements ShouldQueue
      */
     public int $tries = 1;
 
+    /**
+     * Create a new job instance.
+     *
+     * @param string $mediaId The UUID of the media record
+     * @param string $filePath The path to the uploaded file in storage
+     * @param string $disk The storage disk name (e.g., 's3', 'public')
+     * @param array $metadata Media metadata (name, mime_type, size, etc.)
+     * @param array $questions Optional array of quiz questions
+     */
     public function __construct(
         private readonly string $mediaId,
         private readonly string $filePath,
@@ -34,7 +57,12 @@ class ProcessMediaUploadJob implements ShouldQueue
 
     /**
      * Execute the job.
-     * @throws \Exception
+     * 
+     * Processes the media upload by updating the media record, creating questions,
+     * and dispatching location expansion if needed.
+     *
+     * @return void
+     * @throws \Exception If file is not found or media processing fails
      */
     public function handle(): void
     {
@@ -79,15 +107,34 @@ class ProcessMediaUploadJob implements ShouldQueue
             $mediaService = app(MediaService::class);
             $mediaService->createQuestions($media, $this->questions);
 
+            // Refresh media to get latest data including location_selections
+            $media->refresh();
+
+            // Dispatch ExpandLocationSelectionsJob if location selections exist
+            // This ensures location expansion happens after media is successfully processed
+            $locationSelections = $media->location_selections ?? [];
+            if (!empty($locationSelections)) {
+                ExpandLocationSelectionsJob::dispatch(
+                    $media->id,
+                    $locationSelections
+                )->afterCommit();
+
+                Log::info('ExpandLocationSelectionsJob dispatched after media processing', [
+                    'media_id' => $media->id,
+                    'location_selections_count' => count($locationSelections),
+                ]);
+            }
+
             Log::info('Media upload processed successfully', [
                 'media_id' => $media->id,
                 'file_path' => $this->filePath,
                 'disk' => $this->disk,
+                'has_location_selections' => !empty($locationSelections),
             ]);
 
-            // Email notification is dispatched via Media model's updated event
+            // Note: Email and push notifications are dispatched via Media model's updated event
             // after the database transaction commits, ensuring upload completion
-            // is not blocked by email notification failures.
+            // is not blocked by notification failures.
 
         } catch (\Exception $e) {
             Log::error('Failed to process media upload', [

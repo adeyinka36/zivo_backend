@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Jobs\AssignMediaToUsers;
 use App\Models\Media;
+use App\Models\Payment;
 use App\Services\LocationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,10 +38,21 @@ class ExpandLocationSelectionsJob implements ShouldQueue
     public function handle(LocationService $locationService): void
     {
         try {
-            $media = Media::find($this->mediaId);
+            $media = Media::with('payments')->find($this->mediaId);
 
             if (!$media) {
                 Log::warning('Media not found for location expansion', [
+                    'media_id' => $this->mediaId,
+                ]);
+                return;
+            }
+
+            $payment = Payment::where('media_id', $media->id)
+                ->where('status', Payment::STATUS_SUCCEEDED)
+                ->first();
+
+            if (!$payment) {
+                Log::info('Payment not succeeded yet, skipping location expansion', [
                     'media_id' => $this->mediaId,
                 ]);
                 return;

@@ -99,7 +99,7 @@ class NotificationService
         $payload = [
             'to' => $user->push_token,
             'title' => '🎉 Media Upload Complete!',
-            'body' => "Your media is now live!",
+            'body' => "Your media is now live! Details have been sent to {$user->email}",
             'data' => [
                 'type' => 'media_upload_success',
                 'mediaId' => $media->id,
@@ -143,20 +143,34 @@ class NotificationService
     /**
      * Send notification when media becomes current for user
      */
-    public function sendCurrentMediaAssigned(User $user, Media $media): bool
+    public function sendCurrentMediaAssigned(User $user, Media $media, ?\App\Models\UserAssignment $assignment = null): bool
     {
         if (!$this->canSendNotification($user)) {
             return false;
         }
 
+        $expirationTime = null;
+        $expirationText = '';
+        
+        if ($assignment && $assignment->created_at) {
+            $expirationTime = $assignment->created_at->copy()->addHours(24);
+        } else {
+            $expirationTime = now()->addHours(24);
+        }
+        
+        $expirationText = $this->formatExpirationTime($expirationTime);
+
+        $body = 'You have new media to watch. PLEASE WATCH BEFORE ' . $expirationText . '. You may need to refresh the home screen to see it.';
+
         $payload = [
             'to' => $user->push_token,
             'title' => '🎬 New Media Available!',
-            'body' => 'You have new media to watch',
+            'body' => $body,
             'data' => [
                 'type' => 'current_media_assigned',
                 'mediaId' => $media->id,
                 'mediaName' => Str::limit($media->description ?? 'Media', 15, '...'),
+                'expiresAt' => $expirationTime ? $expirationTime->toIso8601String() : null,
                 'screen' => 'explore'
             ],
             'sound' => 'default',
@@ -164,6 +178,20 @@ class NotificationService
         ];
 
         return $this->sendToExpo($payload, $user->id);
+    }
+
+    /**
+     * Format expiration time in a human-readable way
+     */
+    private function formatExpirationTime($expirationTime): string
+    {
+        if (!$expirationTime) {
+            return '';
+        }
+
+        $expiration = $expirationTime instanceof \Carbon\Carbon ? $expirationTime : \Carbon\Carbon::parse($expirationTime);
+        
+        return $expiration->format('M j, Y \a\t g:i A');
     }
 
     /**
@@ -201,15 +229,29 @@ class NotificationService
             return false;
         }
 
+        $targetViews = (int) config('services.media.target_views', 25);
+        $totalViews = $media->rounds * $targetViews;
+        $mediaName = $media->name ?: 'Your media';
+        $mediaDescription = $media->description ?: 'No description';
+
+        $body = sprintf(
+            'Your campaign "%s" completed successfully! Total views: %s',
+            Str::limit($mediaName, 20, '...'),
+            number_format($totalViews)
+        );
+
         $payload = [
             'to' => $user->push_token,
             'title' => '🎉 Campaign Completed!',
-            'body' => 'Your media campaign has completed successfully',
+            'body' => $body,
             'data' => [
                 'type' => 'campaign_completed',
                 'mediaId' => $media->id,
-                'mediaName' => Str::limit($media->description ?? $media->name, 15, '...'),
+                'mediaName' => Str::limit($mediaName, 15, '...'),
+                'mediaDescription' => Str::limit($mediaDescription, 30, '...'),
                 'rounds' => $media->rounds,
+                'totalViews' => $totalViews,
+                'reward' => $media->reward,
                 'screen' => 'profile'
             ],
             'sound' => 'default',

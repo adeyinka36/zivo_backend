@@ -31,8 +31,7 @@ class UploadFileToS3Job implements ShouldQueue
         private readonly string $mediaId,
         private readonly string $tempFilePath,
         private readonly array $metadata,
-        private readonly array $questions = [],
-        private readonly array $locationSelections = []
+        private readonly array $questions = []
     ) {}
 
     /**
@@ -75,12 +74,6 @@ class UploadFileToS3Job implements ShouldQueue
                 'amount_paid' => $totalAmountCents / 100,
             ]);
 
-            $locationSelectionsToExpand = $this->locationSelections;
-            
-            if (empty($locationSelectionsToExpand) && !empty($media->location_selections)) {
-                $locationSelectionsToExpand = $media->location_selections;
-            }
-
             ProcessMediaUploadJob::dispatch(
                 $media->id,
                 $storagePath,
@@ -88,13 +81,6 @@ class UploadFileToS3Job implements ShouldQueue
                 $finalMetadata,
                 $this->questions
             )->afterCommit();
-
-            if (!empty($locationSelectionsToExpand)) {
-                ExpandLocationSelectionsJob::dispatch(
-                    $media->id,
-                    $locationSelectionsToExpand
-                )->afterCommit();
-            }
 
             Storage::disk('local')->delete($this->tempFilePath);
 

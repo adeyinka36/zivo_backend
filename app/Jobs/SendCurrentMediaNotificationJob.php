@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\User;
 use App\Models\Media;
+use App\Models\UserAssignment;
 use App\Services\NotificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -47,7 +48,12 @@ class SendCurrentMediaNotificationJob implements ShouldQueue
         }
 
         if ($this->type === 'assigned') {
-            $notificationService->sendCurrentMediaAssigned($user, $media);
+            $assignment = UserAssignment::where('user_id', $this->userId)
+                ->where('media_id', $this->mediaId)
+                ->where('current', true)
+                ->first();
+            
+            $notificationService->sendCurrentMediaAssigned($user, $media, $assignment);
         } elseif ($this->type === 'removed') {
             $notificationService->sendCurrentMediaRemoved($user, $media);
         }
