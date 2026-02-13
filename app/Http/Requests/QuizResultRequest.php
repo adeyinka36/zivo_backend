@@ -24,6 +24,7 @@ class QuizResultRequest extends FormRequest
         return [
             'answer' => 'required|string|in:A,B,C,D',
             'media_id' => 'required|exists:media,id',
+            'question_id' => 'required|exists:questions,id',
         ];
     }
 
@@ -40,6 +41,8 @@ class QuizResultRequest extends FormRequest
             'answer.in' => 'The answer must be A, B, C, or D.',
             'media_id.required' => 'The media_id field is required.',
             'media_id.exists' => 'The selected media_id is invalid.',
+            'question_id.required' => 'The question_id field is required.',
+            'question_id.exists' => 'The selected question_id is invalid.',
         ];
     }
 }

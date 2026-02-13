@@ -285,13 +285,48 @@ class MediaController extends Controller
         if (!$media) {
             return response()->json(['message' => 'Media not found'], 404);
         }
-        $question = $media->questions()->first();
+
+        // Find the specific question by ID to ensure we validate against the correct question
+        // This is important when media has multiple questions - we need to validate against
+        // the exact question that was shown to the user, not just the first one
+        // Also verify the question belongs to this media to prevent validation against wrong question
+        $question = $media->questions()->where('id', $data['question_id'])->first();
         if (!$question) {
-            return response()->json(['message' => 'Question not found'], 404);
+            Log::warning('Question not found for media', [
+                'media_id' => $media->id,
+                'question_id' => $data['question_id'],
+                'user_id' => $request->user()->id,
+                'available_question_ids' => $media->questions()->pluck('id')->toArray(),
+            ]);
+            return response()->json(['message' => 'Question not found for this media'], 404);
         }
 
-        $userAnswer = strtoupper(trim($data['answer']));
-        $correctAnswer = strtoupper(trim($question->answer));
+        // Normalize answers for comparison - remove all whitespace and convert to uppercase
+        $userAnswer = strtoupper(preg_replace('/\s+/', '', trim($data['answer'])));
+        $correctAnswer = strtoupper(preg_replace('/\s+/', '', trim($question->answer)));
+        
+        // Additional validation: ensure answers are single letters A-D
+        if (!in_array($userAnswer, ['A', 'B', 'C', 'D'], true)) {
+            Log::warning('Invalid answer format received', [
+                'media_id' => $media->id,
+                'question_id' => $question->id,
+                'user_id' => $request->user()->id,
+                'user_answer' => $data['answer'],
+                'normalized_user_answer' => $userAnswer,
+            ]);
+            return response()->json(['message' => 'Invalid answer format'], 400);
+        }
+        
+        if (!in_array($correctAnswer, ['A', 'B', 'C', 'D'], true)) {
+            Log::error('Invalid correct answer stored in database', [
+                'media_id' => $media->id,
+                'question_id' => $question->id,
+                'correct_answer_raw' => $question->answer,
+                'normalized_correct_answer' => $correctAnswer,
+            ]);
+            return response()->json(['message' => 'Invalid question data'], 500);
+        }
+        
         $isCorrect = $userAnswer === $correctAnswer;
 
         if ($isCorrect) {
@@ -303,6 +338,7 @@ class MediaController extends Controller
 
         Log::info("Quiz answered $resultCorrectness", [
             'media_id' => $media->id,
+            'question_id' => $question->id,
             'user_id' => $request->user()->id,
             'user_answer' => $userAnswer,
             'correct_answer' => $correctAnswer,
