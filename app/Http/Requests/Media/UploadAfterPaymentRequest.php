@@ -42,12 +42,11 @@ class UploadAfterPaymentRequest extends FormRequest
             'tags.*' => 'string|max:255|regex:/^[a-zA-Z0-9\s\-_#]+$/',
             'reward' => 'required|integer|min:100|max:1000000',
             'rounds' => 'required|integer|min:1|max:1000000',
+            'radius' => 'nullable|integer|min:1|max:1000',
             'questions' => 'nullable|array|max:20',
-            'questions.*.question' => 'required|string|max:1000',
-            'questions.*.answer' => 'required|string|max:19|regex:/^[a-zA-Z0-9]+$/',
-            'location_selections' => 'nullable|array',
-            'location_selections.*.type' => 'required|string|in:city,country,continent',
-            'location_selections.*.identifier' => 'required|string',
+            'questions.*.question' => 'required|string|max:50',
+            'questions.*.answer' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
+            'location_id' => 'nullable|integer|exists:locations,id',
         ];
     }
 
@@ -104,6 +103,14 @@ class UploadAfterPaymentRequest extends FormRequest
                     $validator->errors()->add('rounds', 'Rounds value does not match the payment record. Please refresh and try again.');
                 }
             }
+
+            $hasRadius = $this->filled('radius');
+            $hasLocationId = $this->filled('location_id');
+
+            if ($hasRadius && $hasLocationId) {
+                $validator->errors()->add('radius', 'You cannot use both radius and specific location. Please choose one option.');
+                $validator->errors()->add('location_id', 'You cannot use both radius and specific location. Please choose one option.');
+            }
         });
     }
 
@@ -130,16 +137,19 @@ class UploadAfterPaymentRequest extends FormRequest
 
             'description.max' => 'Description cannot exceed 1000 characters.',
 
+            'radius.min' => 'Radius must be at least 1 km.',
+            'radius.max' => 'Radius cannot exceed 1000 km.',
+
             'tags.max' => 'You can add at most 10 tags.',
             'tags.*.max' => 'Each tag cannot exceed 255 characters.',
             'tags.*.regex' => 'Tags can only contain letters, numbers, spaces, hyphens, underscores, and hashtags.',
 
             'questions.max' => 'You can add at most 20 questions.',
             'questions.*.question.required' => 'Question text is required.',
-            'questions.*.question.max' => 'Question text cannot exceed 1000 characters.',
+            'questions.*.question.max' => 'Question text cannot exceed 50 characters.',
             'questions.*.answer.required' => 'Correct answer is required.',
-            'questions.*.answer.max' => 'Answer cannot exceed 19 characters.',
-            'questions.*.answer.regex' => 'Answer may only contain letters and numbers without spaces.',
+            'questions.*.answer.max' => 'Answer cannot exceed 38 characters.',
+            'questions.*.answer.regex' => 'Answer may only contain letters, numbers, and spaces.',
         ];
     }
 }

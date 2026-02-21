@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Jobs\AssignMediaToUsers;
+use App\Jobs\AssignMediaToUsersJob;
 use App\Models\Media;
 use App\Models\Payment;
 use App\Services\LocationService;
@@ -59,14 +59,14 @@ class ExpandLocationSelectionsJob implements ShouldQueue
             }
 
             if (empty($this->locationSelections)) {
-                Log::info('No location selections to expand, dispatching AssignMediaToUsers directly', [
+                Log::info('No location selections to expand, dispatching AssignMediaToUsersJob directly', [
                     'media_id' => $this->mediaId,
                 ]);
                 
                 $media->refresh();
                 
                 if ($media->active && $media->payment_status === 'paid') {
-                    AssignMediaToUsers::dispatch($media->id)->afterCommit();
+                    AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
                 }
                 
                 return;
@@ -113,9 +113,9 @@ class ExpandLocationSelectionsJob implements ShouldQueue
             $media->refresh();
 
             if ($media->active && $media->payment_status === 'paid') {
-                AssignMediaToUsers::dispatch($media->id)->afterCommit();
+                AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
 
-                Log::info('AssignMediaToUsers dispatched after location expansion', [
+                Log::info('AssignMediaToUsersJob dispatched after location expansion', [
                     'media_id' => $this->mediaId,
                 ]);
             }

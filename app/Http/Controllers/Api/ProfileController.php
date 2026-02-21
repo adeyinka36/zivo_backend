@@ -68,4 +68,5 @@ class ProfileController extends Controller
             'message' => 'Push token updated successfully',
         ]);
     }
+
 } 

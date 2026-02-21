@@ -15,7 +15,6 @@ use App\Http\Resources\MediaResource;
 use App\Http\Resources\MediaListResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
-use App\Jobs\ExpandLocationSelectionsJob;
 use App\Jobs\ProcessMediaUploadJob;
 use App\Jobs\UploadFileToS3Job;
 use App\Services\MediaWatchService;
@@ -80,10 +79,9 @@ class MediaController extends Controller
         return DB::transaction(function () use ($request) {
             $data = $request->validated();
             $user = $request->user();
-
-            $media = $this->mediaService->createDraftMedia($data, $user);
-
             $file = $request->file('file');
+
+            $media = $this->mediaService->createDraftMedia($data, $user, $file);
             $tempFilePath = null;
 
             if ($file) {
@@ -159,58 +157,22 @@ class MediaController extends Controller
         }
 
         $targetViews = (int) config('services.media.target_views', 10);
-        $tempFilePath = null;
-        $metadata = [];
 
-        if ($media->temp_file_path && Storage::disk('local')->exists($media->temp_file_path)) {
-            $tempFilePath = $media->temp_file_path;
-            
-            $metadata = [
-                'name' => $media->name,
-                'file_name' => $media->file_name,
-                'mime_type' => $media->mime_type,
-                'size' => $media->size,
-                'description' => $request->input('description') ?? $media->description,
-                'reward' => (int) $media->reward,
-                'rounds' => (int) $media->rounds,
-                'quiz_number' => rand(1, $targetViews),
-            ];
-
-            Log::info('Using pre-uploaded file for media processing', [
-                'media_id' => $media->id,
-                'temp_file_path' => $tempFilePath,
-            ]);
-        } else {
-            $file = $request->file('file');
-            
-            if (!$file) {
-                return response()->json(['error' => 'File is required'], 400);
-            }
-
-            $tempFileName = uniqid() . '_' . $file->hashName();
-            $tempFilePath = 'temp_uploads/' . $tempFileName;
-            $file->storeAs('temp_uploads', $tempFileName, ['disk' => 'local']);
-
-            $metadata = [
-                'name' => $file->getClientOriginalName(),
-                'file_name' => $file->getClientOriginalName(),
-                'mime_type' => $file->getMimeType(),
-                'size' => $file->getSize(),
-                'description' => $request->input('description') ?? $media->description,
-                'reward' => (int) $media->reward,
-                'rounds' => (int) $media->rounds,
-                'quiz_number' => rand(1, $targetViews),
-            ];
+        $fileInfo = $this->resolveFilePath($media, $request->file('file'));
+        if (!$fileInfo['success']) {
+            return response()->json(['error' => $fileInfo['error']], 400);
         }
+
+        $metadata = $this->prepareUploadMetadata($media, $request, $targetViews);
 
         UploadFileToS3Job::dispatch(
             $media->id,
-            $tempFilePath,
+            $fileInfo['file_path'],
             $metadata,
             $request->input('questions', [])
         )->afterCommit();
 
-        // Note: ExpandLocationSelectionsJob is now dispatched by ProcessMediaUploadJob
+        // Note: Location IDs are now attached directly in ProcessMediaUploadJob
         // after media processing succeeds, ensuring proper sequencing
 
         if ($media->temp_file_path) {
@@ -275,6 +237,90 @@ class MediaController extends Controller
                 'error' => 'Database error occurred',
             ], 500);
         }
+    }
+
+    /**
+     * Resolve file path for media upload.
+     * 
+     * Checks if media has a pre-uploaded temp file, otherwise handles new file upload.
+     * 
+     * @param Media $media
+     * @param \Illuminate\Http\UploadedFile|null $uploadedFile
+     * @return array{success: bool, file_path?: string, error?: string}
+     */
+    private function resolveFilePath(Media $media, ?\Illuminate\Http\UploadedFile $uploadedFile = null): array
+    {
+        if ($media->temp_file_path && Storage::disk('local')->exists($media->temp_file_path)) {
+            Log::info('Using pre-uploaded file for media processing', [
+                'media_id' => $media->id,
+                'temp_file_path' => $media->temp_file_path,
+            ]);
+
+            return [
+                'success' => true,
+                'file_path' => $media->temp_file_path,
+            ];
+        }
+
+        if (!$uploadedFile) {
+            return [
+                'success' => false,
+                'error' => 'File is required',
+            ];
+        }
+
+        $tempFileName = uniqid() . '_' . $uploadedFile->hashName();
+        $tempFilePath = 'temp_uploads/' . $tempFileName;
+        $uploadedFile->storeAs('temp_uploads', $tempFileName, ['disk' => 'local']);
+
+        return [
+            'success' => true,
+            'file_path' => $tempFilePath,
+        ];
+    }
+
+    /**
+     * Prepare upload metadata from media and request data.
+     * 
+     * Consolidates metadata preparation logic for both temp file and new upload scenarios.
+     * 
+     * @param Media $media
+     * @param UploadAfterPaymentRequest $request
+     * @param int $targetViews
+     * @return array
+     */
+    private function prepareUploadMetadata(Media $media, UploadAfterPaymentRequest $request, int $targetViews): array
+    {
+        $hasTempFile = $media->temp_file_path && Storage::disk('local')->exists($media->temp_file_path);
+        $uploadedFile = $request->file('file');
+
+        if ($hasTempFile) {
+            return [
+                'name' => $media->name,
+                'file_name' => $media->file_name,
+                'mime_type' => $media->mime_type,
+                'size' => $media->size,
+                'description' => $request->input('description') ?? $media->description,
+                'reward' => (int) $media->reward,
+                'rounds' => (int) $media->rounds,
+                'radius' => $request->has('radius') ? (int) $request->input('radius') : ($media->radius ?? null),
+                'location_id' => $request->has('location_id') && !empty($request->input('location_id')) ? $request->input('location_id') : null,
+                'quiz_number' => rand(1, $targetViews),
+            ];
+        }
+
+        return [
+            'name' => $uploadedFile->getClientOriginalName(),
+            'file_name' => $uploadedFile->getClientOriginalName(),
+            'mime_type' => $uploadedFile->getMimeType(),
+            'size' => $uploadedFile->getSize(),
+            'description' => $request->input('description') ?? $media->description,
+            'reward' => (int) $media->reward,
+            'rounds' => (int) $media->rounds,
+            'radius' => $request->has('radius') ? (int) $request->input('radius') : ($media->radius ?? null),
+            'location_id' => $request->has('location_id') && !empty($request->input('location_id')) ? $request->input('location_id') : null,
+            'quiz_number' => rand(1, $targetViews),
+        ];
     }
 
     public function processQuizResult(QuizResultRequest $request): JsonResponse

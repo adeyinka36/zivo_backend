@@ -2,9 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Jobs\AssignMediaToUsersJob;
 use App\Models\Media;
-use App\Models\UserAssignment;
-use App\Services\MediaAssignmentService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -23,7 +22,7 @@ use Illuminate\Support\Facades\Log;
  *    - Payment status is 'paid'
  *    - Active is true
  *    - Media is uploaded (not pending)
- * 2. Assign users to these media using MediaAssignmentService
+ * 2. Dispatch AssignMediaToUsersJob for each media
  */
 class AssignUnassignedMediaJob implements ShouldQueue
 {
@@ -31,10 +30,7 @@ class AssignUnassignedMediaJob implements ShouldQueue
 
     public int $tries = 3;
 
-    /**
-     * Execute the job.
-     */
-    public function handle(MediaAssignmentService $assignmentService): void
+    public function handle(): void
     {
         try {
             $unassignedMedia = Media::query()
@@ -60,17 +56,16 @@ class AssignUnassignedMediaJob implements ShouldQueue
 
             foreach ($unassignedMedia as $media) {
                 try {
-                    $assignedCount = $assignmentService->assignMediaToUsers($media);
+                    AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
 
-                    Log::info('AssignUnassignedMediaJob: Assigned users to media', [
+                    Log::info('AssignUnassignedMediaJob: Dispatched assignment job for media', [
                         'media_id' => $media->id,
-                        'assigned_count' => $assignedCount,
                     ]);
 
                     $processedCount++;
                 } catch (\Exception $e) {
                     $failedCount++;
-                    Log::error('AssignUnassignedMediaJob: Failed to assign users to media', [
+                    Log::error('AssignUnassignedMediaJob: Failed to dispatch assignment job', [
                         'media_id' => $media->id,
                         'error' => $e->getMessage(),
                         'trace' => $e->getTraceAsString(),

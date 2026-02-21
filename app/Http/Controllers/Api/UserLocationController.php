@@ -100,8 +100,15 @@ class UserLocationController extends Controller
     private function findOrCreateLocation(array $data): Location
     {
         return DB::transaction(function () use ($data) {
-            $existing = Location::where('region_name', $data['region_name'])
-                ->where('country', $data['country'])
+            $regionName = $data['region_name'];
+            $country = $data['country'];
+            
+            if ($regionName === 'Unknown' || $regionName === 'User Location') {
+                $regionName = 'User Location ' . round($data['latitude'], 4) . ',' . round($data['longitude'], 4);
+            }
+
+            $existing = Location::where('region_name', $regionName)
+                ->where('country', $country)
                 ->first();
 
             if ($existing) {
@@ -122,15 +129,28 @@ class UserLocationController extends Controller
                 return $existing;
             }
 
-            return Location::create([
-                'region_name' => $data['region_name'],
-                'latitude' => $data['latitude'],
-                'longitude' => $data['longitude'],
-                'country' => $data['country'],
-                'country_code' => $data['country_code'] ?? null,
-                'continent' => $data['continent'],
-                'timezone' => $data['timezone'],
-            ]);
+            try {
+                return Location::create([
+                    'region_name' => $regionName,
+                    'latitude' => $data['latitude'],
+                    'longitude' => $data['longitude'],
+                    'country' => $country,
+                    'country_code' => $data['country_code'] ?? null,
+                    'continent' => $data['continent'],
+                    'timezone' => $data['timezone'],
+                ]);
+            } catch (\Illuminate\Database\QueryException $e) {
+                if ($e->getCode() === '23505' || str_contains($e->getMessage(), 'duplicate key')) {
+                    $existing = Location::where('region_name', $regionName)
+                        ->where('country', $country)
+                        ->first();
+                    
+                    if ($existing) {
+                        return $existing;
+                    }
+                }
+                throw $e;
+            }
         });
     }
 

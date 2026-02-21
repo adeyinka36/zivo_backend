@@ -88,8 +88,8 @@ class AllocateReward implements ShouldQueue
 
         $response->throw();
 
-        $rewardAmountDollars = $this->media->reward / 100;
-        $winner->notify(new RewardAllocationSuccessNotification($rewardAmountDollars));
+//        $rewardAmountDollars = $this->media->reward / 100;
+//        $winner->notify(new RewardAllocationSuccessNotification($rewardAmountDollars));
 
         return $response->json();
     }

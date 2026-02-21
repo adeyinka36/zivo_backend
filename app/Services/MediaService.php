@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Media;
 use App\Models\User;
+use App\Models\Location;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Services\LocationService;
 use Illuminate\Http\UploadedFile;
@@ -136,13 +137,64 @@ class MediaService
     }
 
     /**
-     * Create a draft media record with metadata only
+     * Create or update a draft media record with metadata only.
+     * 
+     * Reuses existing unpaid draft media for the same file to prevent duplicates.
+     * Matches drafts based on file name, size, and mime type to ensure correct video is reused.
      */
-    public function createDraftMedia(array $data, User $user): Media
+    public function createDraftMedia(array $data, User $user, ?UploadedFile $file = null): Media
     {
         $targetViews = (int) config('services.media.target_views', 10);
 
-        return Media::create([
+        $query = Media::where('user_id', $user->id)
+            ->where('payment_status', 'pending')
+            ->where('path', 'pending')
+            ->where('disk', 'pending')
+            ->whereNull('paid_at');
+
+        if ($file) {
+            $query->where('file_name', $file->getClientOriginalName())
+                ->where('size', $file->getSize())
+                ->where('mime_type', $file->getMimeType());
+        }
+
+        $existingDraft = $query->orderBy('created_at', 'desc')->first();
+
+        if ($existingDraft) {
+            $existingDraft->update([
+                'description' => $data['description'] ?? null,
+                'reward' => $data['reward'],
+                'rounds' => $data['rounds'],
+                'radius' => $data['radius'] ?? null,
+                'quiz_number' => rand(1, $targetViews),
+            ]);
+
+            $existingDraft->locations()->detach();
+            if (!empty($data['location_id'])) {
+                $existingDraft->locations()->attach($data['location_id']);
+            } elseif (!empty($data['radius']) && $user->latitude && $user->longitude) {
+                $userLocationId = $this->getOrCreateUserLocation($user);
+                if ($userLocationId) {
+                    $existingDraft->locations()->attach($userLocationId);
+                }
+            }
+
+            if ($existingDraft->temp_file_path && Storage::disk('local')->exists($existingDraft->temp_file_path)) {
+                Storage::disk('local')->delete($existingDraft->temp_file_path);
+            }
+
+            $existingDraft->update(['temp_file_path' => null]);
+
+            Log::info('Reusing existing draft media record for same file', [
+                'media_id' => $existingDraft->id,
+                'user_id' => $user->id,
+                'file_name' => $file ? $file->getClientOriginalName() : 'no file',
+            ]);
+
+            return $existingDraft;
+        }
+
+        $media = Media::create([
             'user_id' => $user->id,
             'name' => 'Pending Upload',
             'file_name' => 'pending',
@@ -151,12 +203,23 @@ class MediaService
             'path' => 'pending',
             'disk' => 'pending',
             'description' => $data['description'] ?? null,
-            'location_selections' => !empty($data['location_selections']) ? $data['location_selections'] : null,
             'reward' => $data['reward'],
             'rounds' => $data['rounds'],
+            'radius' => $data['radius'] ?? null,
             'quiz_number' => rand(1, $targetViews),
             'payment_status' => 'pending',
         ]);
+
+        if (!empty($data['location_id'])) {
+            $media->locations()->attach($data['location_id']);
+        } elseif (!empty($data['radius']) && $user->latitude && $user->longitude) {
+            $userLocationId = $this->getOrCreateUserLocation($user);
+            if ($userLocationId) {
+                $media->locations()->attach($userLocationId);
+            }
+        }
+
+        return $media;
     }
 
 
@@ -222,6 +285,25 @@ class MediaService
     private function generateOptions(string $answerWord): array
     {
         $wordList = config('quiz.word_list', []);
+        $answerWords = preg_split('/\s+/', trim($answerWord));
+        $isMultiWord = count($answerWords) > 1;
+        
+        if ($isMultiWord) {
+            return $this->generateMultiWordOptions($answerWord, $answerWords, $wordList);
+        }
+        
+        return $this->generateSingleWordOptions($answerWord, $wordList);
+    }
+
+    /**
+     * Generate options for single-word answers
+     *
+     * @param string $answerWord
+     * @param array $wordList
+     * @return array{options: array<int, string>, correct_option: string}
+     */
+    private function generateSingleWordOptions(string $answerWord, array $wordList): array
+    {
         $availableWords = array_filter($wordList, fn($word) => strtolower($word) !== strtolower($answerWord));
         
         if (count($availableWords) < 3) {
@@ -245,5 +327,185 @@ class MediaService
             'options' => $allOptions,
             'correct_option' => $correctOption,
         ];
+    }
+
+    /**
+     * Generate options for multi-word answers by replacing random words
+     *
+     * @param string $originalAnswer
+     * @param array $answerWords
+     * @param array $wordList
+     * @return array{options: array<int, string>, correct_option: string}
+     */
+    private function generateMultiWordOptions(string $originalAnswer, array $answerWords, array $wordList): array
+    {
+        $wordCount = count($answerWords);
+        $maxReplacements = min(3, $wordCount);
+        
+        $availableWords = array_filter($wordList, function($word) use ($answerWords) {
+            $wordLower = strtolower($word);
+            foreach ($answerWords as $answerWord) {
+                if (strtolower($answerWord) === $wordLower) {
+                    return false;
+                }
+            }
+            return true;
+        });
+        
+        if (count($availableWords) < 10) {
+            $fallbackWords = ['apple', 'banana', 'orange', 'grape', 'strawberry', 'mango', 'peach', 'cherry', 'kiwi', 'lemon'];
+            $availableWords = array_merge($availableWords, $fallbackWords);
+            $availableWords = array_filter($availableWords, function($word) use ($answerWords) {
+                $wordLower = strtolower($word);
+                foreach ($answerWords as $answerWord) {
+                    if (strtolower($answerWord) === $wordLower) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+        
+        $availableWords = array_values($availableWords);
+        $allOptions = [$originalAnswer];
+        $usedOptions = [strtolower($originalAnswer)];
+        
+        for ($i = 0; $i < 3; $i++) {
+            $option = $this->generateUniqueMultiWordOption(
+                $answerWords,
+                $availableWords,
+                $maxReplacements,
+                $usedOptions
+            );
+            $allOptions[] = $option;
+            $usedOptions[] = strtolower($option);
+        }
+        
+        shuffle($allOptions);
+        
+        $correctOption = 'A';
+        foreach (['A', 'B', 'C', 'D'] as $index => $option) {
+            if (strtolower($allOptions[$index]) === strtolower($originalAnswer)) {
+                $correctOption = $option;
+                break;
+            }
+        }
+        
+        return [
+            'options' => $allOptions,
+            'correct_option' => $correctOption,
+        ];
+    }
+
+    /**
+     * Generate a unique multi-word option by replacing random words
+     *
+     * @param array $answerWords
+     * @param array $availableWords
+     * @param int $maxReplacements
+     * @param array $usedOptions
+     * @return string
+     */
+    private function generateUniqueMultiWordOption(
+        array $answerWords,
+        array $availableWords,
+        int $maxReplacements,
+        array $usedOptions
+    ): string {
+        $maxAttempts = 50;
+        $attempt = 0;
+        
+        while ($attempt < $maxAttempts) {
+            $numReplacements = rand(1, $maxReplacements);
+            $wordCount = count($answerWords);
+            $positionsToReplace = [];
+            
+            if ($numReplacements >= $wordCount) {
+                $positionsToReplace = range(0, $wordCount - 1);
+            } else {
+                $allPositions = range(0, $wordCount - 1);
+                shuffle($allPositions);
+                $positionsToReplace = array_slice($allPositions, 0, $numReplacements);
+            }
+            
+            $replacementWords = [];
+            $availableWordsShuffled = $availableWords;
+            shuffle($availableWordsShuffled);
+            
+            for ($i = 0; $i < $numReplacements; $i++) {
+                if (empty($availableWordsShuffled)) {
+                    $availableWordsShuffled = $availableWords;
+                    shuffle($availableWordsShuffled);
+                }
+                $replacementWords[] = array_shift($availableWordsShuffled);
+            }
+            
+            $newOption = $answerWords;
+            foreach ($positionsToReplace as $index => $position) {
+                $newOption[$position] = $replacementWords[$index];
+            }
+            
+            $optionText = implode(' ', $newOption);
+            $optionTextLower = strtolower($optionText);
+            
+            if (!in_array($optionTextLower, $usedOptions, true)) {
+                return $optionText;
+            }
+            
+            $attempt++;
+        }
+        
+        $fallbackOption = $answerWords;
+        $fallbackOption[0] = $availableWords[array_rand($availableWords)];
+        return implode(' ', $fallbackOption);
+    }
+
+    /**
+     * Get or create a location record for the user's coordinates.
+     *
+     * @param User $user
+     * @return int|null Location ID or null if coordinates are invalid
+     */
+    private function getOrCreateUserLocation(User $user): ?int
+    {
+        if (!$user->latitude || !$user->longitude) {
+            return null;
+        }
+
+        $lat = (float) $user->latitude;
+        $lng = (float) $user->longitude;
+
+        if ($lat == 0.0 || $lng == 0.0 || abs($lat) > 90 || abs($lng) > 180) {
+            return null;
+        }
+
+        if ($user->location_id) {
+            return $user->location_id;
+        }
+
+        $location = Location::where('latitude', $lat)
+            ->where('longitude', $lng)
+            ->first();
+
+        if ($location) {
+            return $location->id;
+        }
+
+        $regionName = 'User Location ' . round($lat, 4) . ',' . round($lng, 4);
+        
+        $location = Location::firstOrCreate(
+            [
+                'country' => 'Unknown',
+                'region_name' => $regionName,
+            ],
+            [
+                'latitude' => $lat,
+                'longitude' => $lng,
+                'continent' => 'Unknown',
+                'timezone' => 'UTC',
+            ]
+        );
+
+        return $location->id;
     }
 }

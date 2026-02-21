@@ -2,23 +2,16 @@
 
 namespace App\Jobs;
 
-use App\Models\Media;
-use App\Services\MediaAssignmentService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 
 /**
- * Job to assign media to users based on location priority.
+ * Legacy job wrapper - redirects to unified AssignMediaToUsersJob.
  * 
- * Assigns media to verified users in the following priority order:
- * 1. Users in cities specified by the media
- * 2. Users in countries specified by the media
- * 3. Users in continents specified by the media
- * 4. Any other verified users
+ * @deprecated Use AssignMediaToUsersJob directly
  */
 class AssignMediaToUsers implements ShouldQueue
 {
@@ -26,36 +19,12 @@ class AssignMediaToUsers implements ShouldQueue
 
     public int $tries = 1;
 
-    /**
-     * Create a new job instance.
-     */
     public function __construct(
         private readonly string $mediaId
     ) {}
 
-    /**
-     * Execute the job.
-     */
-    public function handle(MediaAssignmentService $assignmentService): void
+    public function handle(): void
     {
-        $media = Media::with(['locations', 'user'])->find($this->mediaId);
-
-        if (!$media) {
-            Log::warning('Media not found for assignment', ['media_id' => $this->mediaId]);
-            return;
-        }
-
-        // Check if media is ready for assignment (active and paid)
-        // This allows the job to run independently without blocking on ProcessMediaUploadJob
-        if (!$media->active || $media->payment_status !== 'paid') {
-            Log::info('Media not ready for assignment yet, skipping', [
-                'media_id' => $media->id,
-                'active' => $media->active,
-                'payment_status' => $media->payment_status,
-            ]);
-            return;
-        }
-
-        $assignmentService->assignMediaToUsers($media);
+        AssignMediaToUsersJob::dispatch($this->mediaId)->afterCommit();
     }
 }

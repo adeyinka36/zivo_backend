@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Models\MediaUserWatched;
-use App\Jobs\AssignMediaToUsers;
+use App\Jobs\AssignMediaToUsersJob;
 use App\Jobs\GenerateThumbnailJob;
 use App\Jobs\SendPushNotificationJob;
 use App\Jobs\SendEmailNotificationJob;
@@ -35,6 +35,7 @@ class Media extends Model
         'location_selections',
         'reward',
         'rounds',
+        'radius',
         'payment_status',
         'stripe_payment_intent_id',
         'paid_at',
@@ -54,6 +55,7 @@ class Media extends Model
         'size' => 'integer',
         'reward' => 'integer',
         'rounds' => 'integer',
+        'radius' => 'integer',
         'amount_paid' => 'decimal:2',
         'paid_at' => 'datetime',
         'location_selections' => 'array',
@@ -184,12 +186,12 @@ class Media extends Model
 //                    GenerateThumbnailJob::dispatch($media->id)->afterCommit();
 //                }
 
-                // Assign media to users only if no location selections exist
-                // If location selections exist, ExpandLocationSelectionsJob will dispatch AssignMediaToUsers
-                $hasLocationSelections = !empty($media->location_selections);
+                // Assign media to users only if no location IDs exist
+                // If location IDs exist, ProcessMediaUploadJob will dispatch AssignMediaToUsersJob
+                $hasLocationIds = $media->locations()->exists();
                 
-                if (!$hasLocationSelections) {
-                    AssignMediaToUsers::dispatch($media->id)->afterCommit();
+                if (!$hasLocationIds && empty($media->radius)) {
+                    AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
                 }
 
                 // Send notifications if user exists
@@ -206,7 +208,7 @@ class Media extends Model
                     'path' => $media->path,
                     'disk' => $media->disk,
                     'payment_status' => $media->payment_status,
-                    'has_location_selections' => $hasLocationSelections,
+                    'has_location_ids' => $hasLocationIds,
                 ]);
             }
         });

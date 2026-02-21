@@ -156,7 +156,7 @@ class AuthController extends Controller
 
         $user->sendEmailVerificationNotification();
 
-        return SuccessResponse::make('Verification email sent successfully');
+        return SuccessResponse::make('Verification email sent successfully please check '. $user->email);
     }
 
     public function updateEmail(UpdateEmailRequest $request): JsonResponse

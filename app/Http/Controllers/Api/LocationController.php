@@ -11,6 +11,7 @@ class LocationController extends Controller
 {
     /**
      * Get all locations from the database grouped hierarchically by continent, country, and city.
+     * Each location includes its database ID for direct reference.
      *
      * @return JsonResponse
      */
@@ -19,7 +20,7 @@ class LocationController extends Controller
         $cacheKey = 'locations_hierarchical';
         
         $locations = Cache::remember($cacheKey, 604800, function () {
-            $dbLocations = Location::select('region_name', 'country', 'country_code', 'continent')
+            $dbLocations = Location::select('id', 'region_name', 'country', 'country_code', 'continent')
                 ->orderBy('continent')
                 ->orderBy('country')
                 ->orderBy('region_name')
@@ -41,9 +42,8 @@ class LocationController extends Controller
                 }
                 
                 if (!isset($grouped[$continent][$country][$city])) {
-                    $identifier = "{$continent}|{$country}|{$city}";
                     $grouped[$continent][$country][$city] = [
-                        'identifier' => $identifier,
+                        'id' => $location->id,
                         'type' => 'city',
                         'region_name' => $city,
                         'country' => $country,

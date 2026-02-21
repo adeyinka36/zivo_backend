@@ -135,7 +135,7 @@ Media model's updated event fires
 Dependent jobs dispatched independently:
     - GenerateThumbnailJob (if video)
     - ExpandLocationSelectionsJob (if locations exist)
-    - AssignMediaToUsers (after locations expanded, or directly if no locations)
+    - AssignMediaToUsersJob (after locations expanded, or directly if no locations)
     - SendPushNotificationJob
     - SendEmailNotificationJob
     
@@ -275,7 +275,7 @@ Media model's updated event fires
 Dependent jobs dispatched independently:
     - GenerateThumbnailJob (if video)
     - ExpandLocationSelectionsJob (if locations exist)
-    - AssignMediaToUsers (after locations expanded)
+    - AssignMediaToUsersJob (after locations expanded)
     - SendPushNotificationJob
     - SendEmailNotificationJob
     ↓

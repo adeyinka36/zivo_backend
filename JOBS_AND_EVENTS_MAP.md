@@ -40,7 +40,7 @@ These jobs run automatically on a schedule defined in `routes/console.php`.
     - Created more than 24 hours ago
     - Not watched (no matching record in `media_users_watched`)
   - Deletes stale assignments
-  - Calls `MediaAssignmentService::assignMediaToUsers()` to reassign
+  - Calls `MediaAssignmentService::assignMediaToUsers()` which dispatches `AssignMediaToUsersJob` to reassign
 
 ### 4. DeleteCompletedCampaignsJob
 - **Schedule**: Daily
@@ -62,7 +62,7 @@ These jobs run automatically on a schedule defined in `routes/console.php`.
     - Payment status is 'paid'
     - Active is true
     - Media is uploaded (not pending)
-  - Assigns users via `MediaAssignmentService::assignMediaToUsers()`
+  - Dispatches `AssignMediaToUsersJob` for each media (via `MediaAssignmentService::assignMediaToUsers()`)
   - Logs processing results and handles errors gracefully
 
 ### 6. media:track-failed-uploads
@@ -108,10 +108,10 @@ These jobs are dispatched programmatically in response to user actions or other 
   - Processes location selections (city, country, continent) using batch operations
   - Creates or finds locations in database using efficient bulk queries
   - Associates locations with media (using `attach()` for new locations, `syncWithoutDetaching()` for existing to avoid duplicate key errors)
-  - Dispatches `AssignMediaToUsers` after locations are synced (ensures locations are available for assignment)
-  - If no location selections exist, dispatches `AssignMediaToUsers` directly
+  - Dispatches `AssignMediaToUsersJob` after locations are synced (ensures locations are available for assignment)
+  - If no location selections exist, dispatches `AssignMediaToUsersJob` directly
 - **Performance**: Uses batch database operations (processes 500 locations per chunk) instead of individual queries
-- **Note**: Dispatches `AssignMediaToUsers` after locations are synced to ensure location-based assignment works correctly
+- **Note**: Dispatches `AssignMediaToUsersJob` after locations are synced to ensure location-based assignment works correctly
 
 #### 3. ProcessMediaUploadJob
 - **Triggered**: Dispatched by `UploadFileToS3Job` after file upload completes
@@ -131,17 +131,17 @@ These jobs are dispatched programmatically in response to user actions or other 
 - **Prerequisites**: Media is already processed (path, disk, mime_type are set and saved to database)
 - **Note**: Runs independently - if it fails, other jobs continue
 
-#### 5. AssignMediaToUsers
-- **Triggered**: Dispatched by Media model's `updated` event
-- **Dispatch**: Dispatched from Media model event listener
-- **Purpose**: Assigns media to users to reach target count
+#### 5. AssignMediaToUsersJob
+- **Triggered**: Dispatched by Media model's `updated` event (if no location IDs or radius) or by `ProcessMediaUploadJob` (if location IDs exist) or by `ExpandLocationSelectionsJob` (after location expansion)
+- **Dispatch**: Dispatched from Media model event listener or directly from other jobs
+- **Purpose**: Assigns media to users to reach target count based on location and gender filters
 - **Prerequisites**: Media is already active and payment_status is 'paid' (guaranteed by ProcessMediaUploadJob)
 - **Actions**:
-  - Uses `MediaAssignmentService::assignMediaToUsers()`
-  - Selects users based on location priority (coordinate-based radius search)
+  - Selects users using progressive radius expansion (doubling from initial radius to 500km)
+  - Applies gender filter if media targets specific gender (excludes null/not_saying)
+  - Falls back to random selection within 50km if radius reaches 500km (no gender filter in fallback)
   - Creates `UserAssignment` records
   - Marks assignments as `current = true` if user has no current assignment
-  - Dispatches `SendCurrentMediaNotificationJob` for users who received current assignments
 - **Note**: Runs independently - if it fails, other jobs continue
 
 #### 6. SendPushNotificationJob
@@ -165,7 +165,7 @@ These jobs are dispatched programmatically in response to user actions or other 
     - Increments `rounds_completed`
     - Resets watches (deletes `MediaUserWatched` records)
     - Resets assignments (deletes `UserAssignment` records)
-    - Reassigns media via `MediaAssignmentService::assignMediaToUsers()`
+    - Reassigns media via `MediaAssignmentService::assignMediaToUsers()` which dispatches `AssignMediaToUsersJob`
   - If campaign complete:
     - Marks campaign as complete
     - Sends push notification to uploader via `NotificationService::sendCampaignCompletionNotification()`
@@ -233,7 +233,7 @@ These jobs are dispatched programmatically in response to user actions or other 
   - `active` is `true`
 - **Action**: Dispatches dependent jobs:
   - `GenerateThumbnailJob` (if `mime_type` starts with `video/`)
-  - `AssignMediaToUsers`
+  - `AssignMediaToUsersJob` (only if no location IDs and no radius)
   - `SendPushNotificationJob` (if `user_id` exists)
 - **Note**: This ensures dependent jobs only run after the database transaction commits and the media is fully processed
 
@@ -283,15 +283,18 @@ Event listener detects transition from pending → processed
     ↓
 Dispatches dependent jobs independently:
     GenerateThumbnailJob           → Generate thumbnail (if video)
-    AssignMediaToUsers             → Assign to users (only if no location selections)
+    AssignMediaToUsersJob          → Assign to users (only if no location IDs and no radius)
     SendPushNotificationJob        → Notify creator
     SendEmailNotificationJob       → Email creator
     
-ExpandLocationSelectionsJob (runs after ProcessMediaUploadJob succeeds):
+ProcessMediaUploadJob also dispatches (if location_id exists):
+    - AssignMediaToUsersJob (after location_id is attached)
+    
+ExpandLocationSelectionsJob (runs after ProcessMediaUploadJob succeeds, if location_selections exist):
     - Expands location selections using batch operations
     - Creates/finds locations in database (500 per chunk)
     - Associates locations with media (using attach for new locations)
-    - Dispatches AssignMediaToUsers after locations are synced
+    - Dispatches AssignMediaToUsersJob after locations are synced
     
 Note: 
 - File upload happens BEFORE payment, ensuring upload completes before payment is taken
@@ -299,9 +302,10 @@ Note:
 - Temp files are cleaned up after 24 hours by CleanupTempUploadsJob
 - ExpandLocationSelectionsJob is dispatched by ProcessMediaUploadJob after media processing succeeds
 - This ensures location expansion only happens after media is fully processed and payment_status is 'paid'
-- If location selections exist: ExpandLocationSelectionsJob dispatches AssignMediaToUsers after locations are synced
-- If no location selections: Media model event dispatches AssignMediaToUsers directly
-- This ensures locations are available when AssignMediaToUsers runs
+- If location_id exists: ProcessMediaUploadJob dispatches AssignMediaToUsersJob directly after attaching location
+- If location_selections exist: ExpandLocationSelectionsJob dispatches AssignMediaToUsersJob after locations are synced
+- If no location IDs and no radius: Media model event dispatches AssignMediaToUsersJob directly
+- This ensures locations are available when AssignMediaToUsersJob runs
 - If one job fails, others continue processing
 ```
 
@@ -319,13 +323,14 @@ For each media:
         - Increment rounds_completed
         - Delete all MediaUserWatched records
         - Delete all UserAssignment records
-        - MediaAssignmentService::assignMediaToUsers()
+        - AssignMediaToUsersJob::dispatch()
+            ↓
+        Selects users based on location and gender filters
             ↓
         Creates new assignments
             ↓
         For users without current assignment:
             - Mark assignment as current = true
-            - SendCurrentMediaNotificationJob (via MediaAssignmentService)
     If campaign complete:
         - Mark campaign_completed = true
         - NotificationService::sendCampaignCompletionNotification()
@@ -361,13 +366,14 @@ Finds media with no assignments where:
     - No UserAssignment records exist
     ↓
 For each media:
-    MediaAssignmentService::assignMediaToUsers()
+    AssignMediaToUsersJob::dispatch()
+        ↓
+    Selects users based on location and gender filters
         ↓
     Creates assignments
         ↓
     For users without current assignment:
         - Mark assignment as current = true
-        - SendCurrentMediaNotificationJob (via MediaAssignmentService)
 ```
 
 ### Current Assignment Flow
@@ -453,8 +459,9 @@ If answer correct:
 ## Job Dependencies
 
 ### Independent Jobs (Run in parallel, handle own prerequisites)
-- `UploadFileToS3Job` → `ProcessMediaUploadJob` → `GenerateThumbnailJob` → `AssignMediaToUsers` → `SendPushNotificationJob` → `SendEmailNotificationJob`
-- `UploadFileToS3Job` → `ExpandLocationSelectionsJob` → `AssignMediaToUsers` (runs after locations expanded)
+- `UploadFileToS3Job` → `ProcessMediaUploadJob` → `GenerateThumbnailJob` → `AssignMediaToUsersJob` → `SendPushNotificationJob` → `SendEmailNotificationJob`
+- `UploadFileToS3Job` → `ProcessMediaUploadJob` → `AssignMediaToUsersJob` (if location_id exists)
+- `UploadFileToS3Job` → `ProcessMediaUploadJob` → `ExpandLocationSelectionsJob` → `AssignMediaToUsersJob` (runs after locations expanded)
 ### Independent Jobs (Can run in parallel)
 - `CheckRoundCompletionJob`, `AssignCurrentMediaJob`, and `AssignUnassignedMediaJob` (all run every 6 hours, independent)
 - `CleanupAndReassignMediaJob` and `DeleteCompletedCampaignsJob` (both run daily, independent)
@@ -487,4 +494,5 @@ If answer correct:
 - Each job checks for required conditions before executing
 - Notifications are only sent to users with `push_notifications = true` and a valid `push_token`
 - **Location Processing**: Location expansion uses batch database operations for performance. Large selections (e.g., entire continents) are processed efficiently in chunks of 500 locations, reducing database queries from hundreds to just a few bulk operations.
-- **Location Expansion**: Runs asynchronously and doesn't block media upload or user assignment. If locations aren't expanded yet when `AssignMediaToUsers` runs, it gracefully falls back to general user assignment without location filtering.
+- **Location Expansion**: Runs asynchronously and doesn't block media upload or user assignment. If locations aren't expanded yet when `AssignMediaToUsersJob` runs, it gracefully falls back to general user assignment without location filtering.
+- **Media Assignment**: Uses unified `AssignMediaToUsersJob` for all assignment scenarios. Handles both radius-based and location-selection-based media using progressive radius expansion and gender filtering.
