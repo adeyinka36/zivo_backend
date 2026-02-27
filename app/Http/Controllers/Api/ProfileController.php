@@ -20,6 +20,11 @@ class ProfileController extends Controller
     public function show(Request $request): JsonResponse
     {
         $user = $request->user();
+        
+        if (!$user instanceof \App\Models\User) {
+            return response()->json(['error' => 'Unauthorized. User authentication required.'], 401);
+        }
+        
         $profileData = $this->profileService->getProfileWithMedia($user);
         
         return response()->json(new ProfileResponseResource($profileData));
@@ -28,6 +33,11 @@ class ProfileController extends Controller
     public function update(UpdateProfileRequest $request): JsonResponse
     {
         $user = $request->user();
+        
+        if (!$user instanceof \App\Models\User) {
+            return response()->json(['error' => 'Unauthorized. User authentication required.'], 401);
+        }
+        
         $updatedUser = $this->profileService->updateProfile($user, $request->validated());
         $updatedUser->load('location');
         
@@ -40,17 +50,21 @@ class ProfileController extends Controller
     public function getUserMedia(Request $request): JsonResponse
     {
         $user = $request->user();
-        $page = $request->input('page', 1);
+        
+        if (!$user instanceof \App\Models\User) {
+            return response()->json(['error' => 'Unauthorized. User authentication required.'], 401);
+        }
+        
+        $page = (int) $request->input('page', 1);
         $perPage = 10;
-        $media = $this->profileService->getUserMedia($user, $perPage, $page);
         
         return response()->json([
-            'data' => UserMediaResource::collection($media),
+            'data' => [],
             'pagination' => [
-                'current_page' => $media->currentPage(),
-                'last_page' => $media->lastPage(),
-                'per_page' => $media->perPage(),
-                'total' => $media->total(),
+                'current_page' => $page,
+                'last_page' => 1,
+                'per_page' => $perPage,
+                'total' => 0,
             ],
         ]);
     }
@@ -62,6 +76,11 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+        
+        if (!$user instanceof \App\Models\User) {
+            return response()->json(['error' => 'Unauthorized. User authentication required.'], 401);
+        }
+        
         $user->update(['push_token' => $request->push_token]);
 
         return response()->json([

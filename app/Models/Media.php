@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Models\MediaUserWatched;
 use App\Jobs\AssignMediaToUsersJob;
 use App\Jobs\GenerateThumbnailJob;
-use App\Jobs\SendPushNotificationJob;
 use App\Jobs\SendEmailNotificationJob;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -23,7 +22,7 @@ class Media extends Model
 
 //    public mixed $locations;
     protected $fillable = [
-        'user_id',
+        'creator_id',
         'name',
         'file_name',
         'mime_type',
@@ -33,37 +32,36 @@ class Media extends Model
         'disk',
         'description',
         'location_selections',
-        'reward',
         'rounds',
-        'radius',
+        'offer',
+        'from_date',
+        'to_date',
         'payment_status',
         'stripe_payment_intent_id',
         'paid_at',
         'amount_paid',
         'thumbnail',
-        'quiz_played',
-        'quiz_number',
         'view_count',
         'active',
         'rounds_completed',
         'campaign_completed',
-        'prize_won',
-        'prize_distributed'
+        'target_reached_at',
     ];
 
     protected $casts = [
         'size' => 'integer',
-        'reward' => 'integer',
         'rounds' => 'integer',
-        'radius' => 'integer',
         'amount_paid' => 'decimal:2',
         'paid_at' => 'datetime',
+        'from_date' => 'datetime',
+        'to_date' => 'datetime',
+        'target_reached_at' => 'datetime',
         'location_selections' => 'array',
     ];
 
-    public function user(): BelongsTo
+    public function creator(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Creator::class);
     }
 
 
@@ -79,8 +77,7 @@ class Media extends Model
 
     public function watchedByUsers(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'media_users_watched', 'media_id', 'user_id')
-            ->where('media_users_watched.user_id', '!=', $this->user_id);
+        return $this->belongsToMany(User::class, 'media_users_watched', 'media_id', 'user_id');
     }
 
     public function watches(): HasMany
@@ -106,6 +103,11 @@ class Media extends Model
             ->withTimestamps();
     }
 
+    public function campaign(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(Campaign::class);
+    }
+
     public function getWatchCount(): int
     {
         return $this->watches()->count();
@@ -118,13 +120,9 @@ class Media extends Model
 
     public function shouldTriggerQuiz(int $watchCount): bool
     {
-        Log::info('should not trigger quiz--',[
-            'watch_count' => $watchCount,
-            'quiz_number' => $this->quiz_number,
-            'has_question' => $this->hasQuestion(),
-            'trigger_quiz' => $this->hasQuestion() && $this->quiz_number == $watchCount
-        ]);
-        return $this->hasQuestion() && $this->quiz_number == $watchCount;
+        // With the new model, every valid first-time watch of a media
+        // that has a question should trigger a quiz for the user.
+        return $this->hasQuestion();
     }
 
     public function getWatchesPerRound(): int
@@ -140,10 +138,6 @@ class Media extends Model
     public function incrementRound(): void
     {
         $this->increment('rounds_completed');
-        $this->update([
-            'prize_won' => false,
-            'prize_distributed' => false
-        ]);
         $this->refresh();
     }
 
@@ -189,18 +183,15 @@ class Media extends Model
                 // Assign media to users only if no location IDs exist
                 // If location IDs exist, ProcessMediaUploadJob will dispatch AssignMediaToUsersJob
                 $hasLocationIds = $media->locations()->exists();
-                
-                if (!$hasLocationIds && empty($media->radius)) {
+
+                if (!$hasLocationIds) {
                     AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
                 }
 
-                // Send notifications if user exists
-                if ($media->user_id) {
-                    // Send push notification
-                    SendPushNotificationJob::dispatch($media->user_id, $media->id)->afterCommit();
-                    
-                    // Send email notification
-                    SendEmailNotificationJob::dispatch($media->user_id, $media->id)->afterCommit();
+                // Send notifications if creator exists
+                if ($media->creator_id) {
+                    // Send email notification (push notifications removed for creators - web only)
+                    SendEmailNotificationJob::dispatch($media->creator_id, $media->id)->afterCommit();
                 }
 
                 Log::info('Dependent jobs dispatched after media processing', [
@@ -219,7 +210,7 @@ class Media extends Model
      */
     public function getFileUrl(): ?string
     {
-        if (!$this->path) {
+        if (!$this->path || $this->path === 'pending' || $this->disk === 'pending') {
             return null;
         }
 

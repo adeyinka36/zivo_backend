@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
-    <title>Email Verified - Zivo</title>
+    <title>Email Verified - ZI-VO</title>
     <style>
         * {
             margin: 0;

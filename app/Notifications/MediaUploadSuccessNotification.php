@@ -34,21 +34,19 @@ class MediaUploadSuccessNotification extends Notification
      */
     public function toMail($notifiable): MailMessage
     {
-        $rewardAmount = '$' . number_format($this->media->reward / 100, 2);
         $mediaDescription = $this->media->description ?: 'Your media';
 
         return (new MailMessage)
             ->subject('🎉 Your Media Upload is Live!')
             ->greeting('Hello ' . $notifiable->name . ',')
-            ->line('Great news! Your media has been successfully uploaded and is now live on Zivo.')
+            ->line('Great news! Your media has been successfully uploaded and is now live on ZI-VO.')
             ->line('**Media Details:**')
             ->line('• **Title:** ' . $mediaDescription)
-            ->line('• **Reward:** ' . $rewardAmount)
             ->line('• **Rounds:** ' . $this->media->rounds)
             ->line('Your media is now available for viewers to watch and engage with.')
             ->line('**Next Steps:**')
-            ->line('To track your upload and view its performance, please refresh the profile page and check the "My Uploads" section in your profile. You\'ll be able to see all your uploaded media and monitor their progress there.')
-            ->line('Thank you for sharing your content with the Zivo community.')
-            ->salutation('Best regards, The Zivo Team');
+            ->line('To track your upload and view its performance, please refresh the profile page and check the "My Uploads" section. You\'ll be able to see all your uploaded media and monitor their progress there.')
+            ->line('Thank you for sharing your content with the ZI-VO community.')
+            ->salutation('Best regards, The ZI-VO Team');
     }
 }

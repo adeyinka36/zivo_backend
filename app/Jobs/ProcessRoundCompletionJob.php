@@ -6,8 +6,8 @@ use App\Models\Media;
 use App\Models\MediaUserWatched;
 use App\Models\User;
 use App\Models\UserAssignment;
+use App\Jobs\AssignMediaToUsersJob;
 use App\Jobs\SendCampaignCompletionEmailJob;
-use App\Services\MediaAssignmentService;
 use App\Services\MediaWatchService;
 use App\Services\NotificationService;
 use Illuminate\Bus\Queueable;
@@ -33,10 +33,9 @@ class ProcessRoundCompletionJob implements ShouldQueue
 
     public function handle(
         MediaWatchService $mediaWatchService,
-        MediaAssignmentService $assignmentService,
         NotificationService $notificationService
     ): void {
-        DB::transaction(function () use ($mediaWatchService, $assignmentService, $notificationService) {
+        DB::transaction(function () use ($mediaWatchService, $notificationService) {
             $media = $this->media;
             $watchCount = $media->getWatchCount();
 
@@ -47,15 +46,21 @@ class ProcessRoundCompletionJob implements ShouldQueue
             if (!$media->isCampaignComplete()) {
                 $media->incrementRound();
                 $this->resetWatchesForRound($media);
-                $this->resetAssignmentsForRound($media, $assignmentService);
+                $this->resetAssignmentsForRound($media);
             }
 
             if ($media->isCampaignComplete()) {
                 $wasAlreadyComplete = $media->campaign_completed;
+                
+                if (!$media->target_reached_at) {
+                    $media->update(['target_reached_at' => now()->utc()]);
+                    $this->notifyTargetReached($media);
+                }
+                
                 $media->completeCampaign();
 
                 if (!$wasAlreadyComplete) {
-                    $this->notifyCampaignCompletion($media, $notificationService);
+                    $this->notifyCampaignCompletion($media, 'completed');
                 }
             }
         });
@@ -64,7 +69,6 @@ class ProcessRoundCompletionJob implements ShouldQueue
     private function getWatchersForMedia(Media $media): Collection
     {
         $watcherIds = MediaUserWatched::where('media_id', $media->id)
-            ->where('user_id', '!=', $media->user_id)
             ->pluck('user_id')
             ->unique();
 
@@ -76,7 +80,7 @@ class ProcessRoundCompletionJob implements ShouldQueue
         MediaUserWatched::where('media_id', $media->id)->delete();
     }
 
-    private function resetAssignmentsForRound(Media $media, MediaAssignmentService $assignmentService): void
+    private function resetAssignmentsForRound(Media $media): void
     {
         $deletedCount = UserAssignment::where('media_id', $media->id)->delete();
 
@@ -85,34 +89,49 @@ class ProcessRoundCompletionJob implements ShouldQueue
             'deleted_count' => $deletedCount,
         ]);
 
-        $assignedCount = $assignmentService->assignMediaToUsers($media);
+        AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
 
-        Log::info('Reassigned media for new round', [
+        Log::info('Dispatched assignment job for new round', [
             'media_id' => $media->id,
-            'assigned_count' => $assignedCount,
         ]);
     }
 
-    private function notifyCampaignCompletion(Media $media, NotificationService $notificationService): void
+    private function notifyTargetReached(Media $media): void
     {
-        $uploader = $media->user;
+        $creator = $media->creator;
 
-        if (!$uploader) {
-            Log::warning('Uploader not found for campaign completion notification', [
+        if (!$creator) {
+            Log::warning('Creator not found for target reached notification', [
                 'media_id' => $media->id,
             ]);
             return;
         }
 
-        // Send push notification
-        $notificationService->sendCampaignCompletionNotification($uploader, $media);
+        SendCampaignCompletionEmailJob::dispatch($creator->id, $media->id, 'target_reached')->afterCommit();
 
-        // Send email notification asynchronously
-        SendCampaignCompletionEmailJob::dispatch($uploader->id, $media->id)->afterCommit();
+        Log::info('Target reached notification sent', [
+            'media_id' => $media->id,
+            'creator_id' => $creator->id,
+        ]);
+    }
+
+    private function notifyCampaignCompletion(Media $media, string $reason): void
+    {
+        $creator = $media->creator;
+
+        if (!$creator) {
+            Log::warning('Creator not found for campaign completion notification', [
+                'media_id' => $media->id,
+            ]);
+            return;
+        }
+
+        SendCampaignCompletionEmailJob::dispatch($creator->id, $media->id, $reason)->afterCommit();
 
         Log::info('Campaign completion notifications sent', [
             'media_id' => $media->id,
-            'uploader_id' => $uploader->id,
+            'creator_id' => $creator->id,
+            'reason' => $reason,
         ]);
     }
 

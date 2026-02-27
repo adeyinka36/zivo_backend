@@ -11,42 +11,47 @@ use Illuminate\Support\Facades\Log;
 class LocationService
 {
     /**
-     * Create or find a location in the database.
+     * Find a location in the database (locations must be added manually).
      *
      * @param string $city
      * @param string $country
      * @param string $continent
-     * @return Location
+     * @param string|null $countryCode
+     * @return Location|null Returns null if location not found
      */
-    public function createOrFindLocation(string $city, string $country, string $continent, ?string $countryCode = null): Location
+    /**
+     * Find a location in the database (locations must be added manually).
+     *
+     * @param string $city
+     * @param string $country
+     * @param string $continent
+     * @param string|null $countryCode
+     * @return Location|null
+     */
+    public function createOrFindLocation(string $city, string $country, string $continent, ?string $countryCode = null): ?Location
     {
-        return DB::transaction(function () use ($city, $country, $continent, $countryCode) {
-            $location = Location::where('region_name', $city)
-                ->where('country', $country)
-                ->first();
+        $location = Location::where('region_name', $city)
+            ->where('country', $country)
+            ->first();
 
-            if ($location) {
-                if (!$location->country_code && $countryCode) {
-                    $location->update(['country_code' => $countryCode]);
-                }
-                if ($location->continent !== $continent) {
-                    $location->update(['continent' => $continent]);
-                }
-                return $location;
+        if ($location) {
+            if (!$location->country_code && $countryCode) {
+                $location->update(['country_code' => $countryCode]);
             }
+            if ($location->continent !== $continent) {
+                $location->update(['continent' => $continent]);
+            }
+            return $location;
+        }
 
-            $code = $countryCode ?? CountryCodes::getCountryCode($country);
+        // Location not found - must be added manually to database
+        Log::warning('Location not found in database', [
+            'city' => $city,
+            'country' => $country,
+            'continent' => $continent,
+        ]);
 
-            return Location::create([
-                'region_name' => $city,
-                'country' => $country,
-                'country_code' => $code,
-                'continent' => $continent,
-                'latitude' => 0,
-                'longitude' => 0,
-                'timezone' => 'UTC',
-            ]);
-        });
+        return null;
     }
 
     /**
@@ -226,7 +231,6 @@ class LocationService
                     return $location->region_name . '|' . $location->country;
                 });
 
-                $toCreate = [];
                 $toUpdate = [];
 
                 foreach ($chunk as $data) {
@@ -248,29 +252,13 @@ class LocationService
                             $toUpdate[$existing->id] = $updates;
                         }
                     } else {
-                        $toCreate[] = [
+                        // Location not found - must be added manually to database
+                        Log::warning('Location not found in database', [
                             'region_name' => $data['region_name'],
                             'country' => $data['country'],
-                            'country_code' => $data['country_code'],
                             'continent' => $data['continent'],
-                            'latitude' => 0,
-                            'longitude' => 0,
-                            'timezone' => 'UTC',
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ];
+                        ]);
                     }
-                }
-
-                if (!empty($toCreate)) {
-                    Location::insert($toCreate);
-
-                    $newLocations = Location::whereIn('region_name', array_column($toCreate, 'region_name'))
-                        ->whereIn('country', array_column($toCreate, 'country'))
-                        ->pluck('id')
-                        ->toArray();
-
-                    $locationIds = array_merge($locationIds, $newLocations);
                 }
 
                 if (!empty($toUpdate)) {

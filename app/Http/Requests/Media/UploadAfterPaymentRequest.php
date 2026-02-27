@@ -37,25 +37,46 @@ class UploadAfterPaymentRequest extends FormRequest
                 'max:5368709120',
                 'mimes:' . implode(',', $allFormats)
             ],
-            'description' => 'nullable|string|max:1000',
+            'offer' => 'required|string|max:255',
             'tags' => 'nullable|array|max:10',
             'tags.*' => 'string|max:255|regex:/^[a-zA-Z0-9\s\-_#]+$/',
-            'reward' => 'required|integer|min:100|max:1000000',
             'rounds' => 'required|integer|min:1|max:1000000',
-            'radius' => 'nullable|integer|min:1|max:1000',
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:50',
             'questions.*.answer' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
             'location_id' => 'nullable|integer|exists:locations,id',
+            'location_selections' => 'nullable|array',
+            'location_selections.*.type' => 'required|string|in:city,country,continent',
+            'location_selections.*.identifier' => 'required|string',
+            'from_date' => 'required|date',
+            'to_date' => 'required|date|after:from_date',
         ];
     }
 
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
+            // Validate that to_date is at least 1 day after from_date
+            if ($this->filled('from_date') && $this->filled('to_date')) {
+                $fromDate = \Carbon\Carbon::parse($this->input('from_date'));
+                $toDate = \Carbon\Carbon::parse($this->input('to_date'));
+                $minToDate = $fromDate->copy()->addDay();
+                
+                if ($toDate->lt($minToDate)) {
+                    $validator->errors()->add('to_date', 'The valid until date must be at least 1 day after the valid from date.');
+                }
+            }
+            
             if ($this->filled('payment_id')) {
+                $creator = $this->user();
+                
+                if (!$creator instanceof \App\Models\Creator) {
+                    $validator->errors()->add('payment_id', 'Unauthorized. Creator authentication required.');
+                    return;
+                }
+                
                 $payment = \App\Models\Payment::where('id', $this->input('payment_id'))
-                    ->where('user_id', $this->user()->id)
+                    ->where('creator_id', $creator->id)
                     ->first();
 
                 if (!$payment) {
@@ -73,7 +94,7 @@ class UploadAfterPaymentRequest extends FormRequest
                     return;
                 }
 
-                if ($payment->media->user_id !== $this->user()->id) {
+                if ($payment->media->creator_id !== $creator->id) {
                     $validator->errors()->add('payment_id', 'You do not have permission to upload media for this payment.');
                     return;
                 }
@@ -92,24 +113,19 @@ class UploadAfterPaymentRequest extends FormRequest
                     return;
                 }
 
-                $frontendReward = (int) $this->input('reward');
                 $frontendRounds = (int) $this->input('rounds');
-
-                if ($frontendReward !== (int) $media->reward) {
-                    $validator->errors()->add('reward', 'Reward amount does not match the payment record. Please refresh and try again.');
-                }
 
                 if ($frontendRounds !== (int) $media->rounds) {
                     $validator->errors()->add('rounds', 'Rounds value does not match the payment record. Please refresh and try again.');
                 }
             }
 
-            $hasRadius = $this->filled('radius');
             $hasLocationId = $this->filled('location_id');
+            $hasLocationSelections = $this->filled('location_selections');
 
-            if ($hasRadius && $hasLocationId) {
-                $validator->errors()->add('radius', 'You cannot use both radius and specific location. Please choose one option.');
-                $validator->errors()->add('location_id', 'You cannot use both radius and specific location. Please choose one option.');
+            if ($hasLocationId && $hasLocationSelections) {
+                $validator->errors()->add('location_id', 'You can only use one location option: location_id or location_selections.');
+                $validator->errors()->add('location_selections', 'You can only use one location option: location_id or location_selections.');
             }
         });
     }
@@ -125,20 +141,19 @@ class UploadAfterPaymentRequest extends FormRequest
             'file.max' => 'The file size must not exceed 5GB.',
             'file.mimes' => 'The file must be a valid image or video format. Supported formats include: JPEG, PNG, GIF, BMP, TIFF, WebP, MP4, AVI, MOV, WebM, MKV, and many others.',
 
-            'reward.required' => 'Reward amount is required.',
-            'reward.min' => 'Reward must be at least $1.00 (100 cents).',
-            'reward.max' => 'Reward cannot exceed $1,000.00 (1,000,000 cents).',
-            'reward.integer' => 'Reward must be a valid amount in cents.',
+            'offer.required' => 'Offer is required.',
+            'offer.max' => 'Offer cannot exceed 255 characters.',
 
             'rounds.required' => 'Number of rounds is required.',
             'rounds.integer' => 'Rounds must be a valid number.',
             'rounds.min' => 'Rounds must be at least 1.',
             'rounds.max' => 'Rounds cannot exceed 1,000,000.',
 
-            'description.max' => 'Description cannot exceed 1000 characters.',
-
-            'radius.min' => 'Radius must be at least 1 km.',
-            'radius.max' => 'Radius cannot exceed 1000 km.',
+            'from_date.required' => 'Valid from date is required.',
+            'from_date.date' => 'Valid from date must be a valid date.',
+            'to_date.required' => 'Valid until date is required.',
+            'to_date.date' => 'Valid until date must be a valid date.',
+            'to_date.after' => 'Valid until date must be after valid from date.',
 
             'tags.max' => 'You can add at most 10 tags.',
             'tags.*.max' => 'Each tag cannot exceed 255 characters.',

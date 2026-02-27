@@ -29,14 +29,14 @@ class CreatePaymentIntentRequest extends FormRequest
         $allFormats = array_merge($imageFormats, $videoFormats);
 
         return [
-            'description' => 'nullable|string|max:1000',
-            'reward' => 'required|integer|min:100|max:1000000',
+            'offer' => 'required|string|max:255',
             'rounds' => 'required|integer|min:1|max:1000000',
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:50',
             'questions.*.answer' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
-            'radius' => 'nullable|integer|min:1|max:1000',
             'location_id' => 'nullable|integer|exists:locations,id',
+            'from_date' => 'required|date',
+            'to_date' => 'required|date|after:from_date',
             'file' => [
                 'nullable',
                 'file',
@@ -49,20 +49,19 @@ class CreatePaymentIntentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'reward.required' => 'Reward amount is required.',
-            'reward.min' => 'Reward must be at least $1.00 (100 cents).',
-            'reward.max' => 'Reward cannot exceed $1,000.00 (1,000,000 cents).',
-            'reward.integer' => 'Reward must be a valid amount in cents.',
+            'offer.required' => 'Offer is required.',
+            'offer.max' => 'Offer cannot exceed 255 characters.',
             
             'rounds.required' => 'Number of rounds is required.',
             'rounds.integer' => 'Rounds must be a valid number.',
             'rounds.min' => 'Rounds must be at least 1.',
             'rounds.max' => 'Rounds cannot exceed 1,000,000.',
             
-            'description.max' => 'Description cannot exceed 1000 characters.',
-            
-            'radius.min' => 'Radius must be at least 1 km.',
-            'radius.max' => 'Radius cannot exceed 1000 km.',
+            'from_date.required' => 'Valid from date is required.',
+            'from_date.date' => 'Valid from date must be a valid date.',
+            'to_date.required' => 'Valid until date is required.',
+            'to_date.date' => 'Valid until date must be a valid date.',
+            'to_date.after' => 'Valid until date must be after valid from date.',
             
             'questions.max' => 'You can add at most 20 questions.',
             'questions.*.question.required' => 'Question text is required.',
@@ -81,13 +80,18 @@ class CreatePaymentIntentRequest extends FormRequest
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
-            $hasRadius = $this->filled('radius');
-            $hasLocationId = $this->filled('location_id');
-
-            if ($hasRadius && $hasLocationId) {
-                $validator->errors()->add('radius', 'You cannot use both radius and specific location. Please choose one option.');
-                $validator->errors()->add('location_id', 'You cannot use both radius and specific location. Please choose one option.');
+            // Validate that to_date is at least 1 day after from_date
+            if ($this->filled('from_date') && $this->filled('to_date')) {
+                $fromDate = \Carbon\Carbon::parse($this->input('from_date'));
+                $toDate = \Carbon\Carbon::parse($this->input('to_date'));
+                $minToDate = $fromDate->copy()->addDay();
+                
+                if ($toDate->lt($minToDate)) {
+                    $validator->errors()->add('to_date', 'The valid until date must be at least 1 day after the valid from date.');
+                }
             }
+            
+            // Radius-based targeting has been removed; only explicit locations are supported.
         });
     }
 } 

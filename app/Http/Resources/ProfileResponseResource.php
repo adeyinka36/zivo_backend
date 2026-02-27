@@ -9,9 +9,11 @@ class ProfileResponseResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $media = $this['media'] ?? collect([]);
+        
         return [
             'user' => new ProfileResource($this['user']),
-            'media' => UserMediaResource::collection($this['media']),
+            'media' => $media->isEmpty() ? [] : UserMediaResource::collection($media),
         ];
     }
 } 

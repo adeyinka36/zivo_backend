@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\Media;
-use App\Models\User;
+use App\Models\Creator;
 use App\Models\Location;
 use App\Http\Requests\Media\StoreMediaRequest;
 use App\Services\LocationService;
@@ -25,10 +25,10 @@ class MediaService
      *
      * @param UploadedFile $file
      * @param array $metadata
-     * @param int $userId
+     * @param string $creatorId
      * @return Media
      */
-    public function store(UploadedFile $file, array $metadata, string $userId): Media
+    public function store(UploadedFile $file, array $metadata, string $creatorId): Media
     {
         $disk = app()->environment('testing') ? 'public' : 's3';
         $path = $disk === 's3' ? 'zivo_media/' . $file->hashName() : 'media/' . $file->hashName();
@@ -40,7 +40,7 @@ class MediaService
         );
 
         $media = Media::create([
-            'user_id' => $userId,
+            'creator_id' => $creatorId,
             'name' => $file->getClientOriginalName(),
             'file_name' => $file->getClientOriginalName(),
             'mime_type' => $file->getMimeType(),
@@ -48,7 +48,6 @@ class MediaService
             'path' => $path,
             'disk' => $disk,
             'description' => $metadata['description'] ?? null,
-            'reward' => $metadata['reward'] ?? 100,
             'rounds' => $metadata['rounds'] ?? 1,
         ]);
 
@@ -142,11 +141,11 @@ class MediaService
      * Reuses existing unpaid draft media for the same file to prevent duplicates.
      * Matches drafts based on file name, size, and mime type to ensure correct video is reused.
      */
-    public function createDraftMedia(array $data, User $user, ?UploadedFile $file = null): Media
+    public function createDraftMedia(array $data, Creator $creator, ?UploadedFile $file = null): Media
     {
         $targetViews = (int) config('services.media.target_views', 10);
 
-        $query = Media::where('user_id', $user->id)
+        $query = Media::where('creator_id', $creator->id)
             ->where('payment_status', 'pending')
             ->where('path', 'pending')
             ->where('disk', 'pending')
@@ -162,21 +161,15 @@ class MediaService
 
         if ($existingDraft) {
             $existingDraft->update([
-                'description' => $data['description'] ?? null,
-                'reward' => $data['reward'],
+                'offer' => $data['offer'] ?? null,
                 'rounds' => $data['rounds'],
-                'radius' => $data['radius'] ?? null,
-                'quiz_number' => rand(1, $targetViews),
+                'from_date' => isset($data['from_date']) ? $data['from_date'] : null,
+                'to_date' => isset($data['to_date']) ? $data['to_date'] : null,
             ]);
 
             $existingDraft->locations()->detach();
             if (!empty($data['location_id'])) {
                 $existingDraft->locations()->attach($data['location_id']);
-            } elseif (!empty($data['radius']) && $user->latitude && $user->longitude) {
-                $userLocationId = $this->getOrCreateUserLocation($user);
-                if ($userLocationId) {
-                    $existingDraft->locations()->attach($userLocationId);
-                }
             }
 
             if ($existingDraft->temp_file_path && Storage::disk('local')->exists($existingDraft->temp_file_path)) {
@@ -187,7 +180,7 @@ class MediaService
 
             Log::info('Reusing existing draft media record for same file', [
                 'media_id' => $existingDraft->id,
-                'user_id' => $user->id,
+                'creator_id' => $creator->id,
                 'file_name' => $file ? $file->getClientOriginalName() : 'no file',
             ]);
 
@@ -195,28 +188,22 @@ class MediaService
         }
 
         $media = Media::create([
-            'user_id' => $user->id,
+            'creator_id' => $creator->id,
             'name' => 'Pending Upload',
             'file_name' => 'pending',
             'mime_type' => 'pending',
             'size' => 0,
             'path' => 'pending',
             'disk' => 'pending',
-            'description' => $data['description'] ?? null,
-            'reward' => $data['reward'],
+            'offer' => $data['offer'] ?? null,
             'rounds' => $data['rounds'],
-            'radius' => $data['radius'] ?? null,
-            'quiz_number' => rand(1, $targetViews),
+            'from_date' => isset($data['from_date']) ? $data['from_date'] : null,
+            'to_date' => isset($data['to_date']) ? $data['to_date'] : null,
             'payment_status' => 'pending',
         ]);
 
         if (!empty($data['location_id'])) {
             $media->locations()->attach($data['location_id']);
-        } elseif (!empty($data['radius']) && $user->latitude && $user->longitude) {
-            $userLocationId = $this->getOrCreateUserLocation($user);
-            if ($userLocationId) {
-                $media->locations()->attach($userLocationId);
-            }
         }
 
         return $media;
@@ -466,23 +453,23 @@ class MediaService
      * @param User $user
      * @return int|null Location ID or null if coordinates are invalid
      */
-    private function getOrCreateUserLocation(User $user): ?int
+    /**
+     * Get location ID from coordinates (locations must be added manually to database).
+     *
+     * @param float $latitude
+     * @param float $longitude
+     * @return int|null Location ID or null if not found
+     */
+    private function getOrCreateLocationFromCoordinates(float $latitude, float $longitude): ?int
     {
-        if (!$user->latitude || !$user->longitude) {
-            return null;
-        }
-
-        $lat = (float) $user->latitude;
-        $lng = (float) $user->longitude;
+        $lat = (float) $latitude;
+        $lng = (float) $longitude;
 
         if ($lat == 0.0 || $lng == 0.0 || abs($lat) > 90 || abs($lng) > 180) {
             return null;
         }
 
-        if ($user->location_id) {
-            return $user->location_id;
-        }
-
+        // Try to find location by coordinates
         $location = Location::where('latitude', $lat)
             ->where('longitude', $lng)
             ->first();
@@ -491,21 +478,12 @@ class MediaService
             return $location->id;
         }
 
-        $regionName = 'User Location ' . round($lat, 4) . ',' . round($lng, 4);
-        
-        $location = Location::firstOrCreate(
-            [
-                'country' => 'Unknown',
-                'region_name' => $regionName,
-            ],
-            [
-                'latitude' => $lat,
-                'longitude' => $lng,
-                'continent' => 'Unknown',
-                'timezone' => 'UTC',
-            ]
-        );
+        // Location not found - must be added manually to database
+        Log::warning('Location not found in database', [
+            'latitude' => $lat,
+            'longitude' => $lng,
+        ]);
 
-        return $location->id;
+        return null;
     }
 }

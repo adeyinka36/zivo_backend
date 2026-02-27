@@ -79,8 +79,14 @@ class PaymentController extends Controller
      */
     public function getPaymentStatus(Request $request, string $paymentId)
     {
+        $user = $request->user();
+        
+        if (!$user instanceof \App\Models\Creator) {
+            return response()->json(['error' => 'Unauthorized. Creator authentication required.'], 401);
+        }
+        
         $payment = Payment::where('id', $paymentId)
-            ->where('user_id', $request->user()->id)
+            ->where('creator_id', $user->id)
             ->first();
 
         if (!$payment) {
@@ -100,14 +106,20 @@ class PaymentController extends Controller
     }
 
     /**
-     * Get user's payment history
+     * Get creator's payment history
      */
     public function getPaymentHistory(GetPaymentHistoryRequest $request)
     {
+        $user = $request->user();
+        
+        if (!$user instanceof \App\Models\Creator) {
+            return response()->json(['error' => 'Unauthorized. Creator authentication required.'], 401);
+        }
+        
         $perPage = $request->input('per_page', 15);
         $page = $request->input('page', 1);
         
-        $query = Payment::where('user_id', $request->user()->id)
+        $query = Payment::where('creator_id', $user->id)
             ->with(['media:id,name,file_name']);
 
         // Apply status filter if provided
@@ -142,8 +154,14 @@ class PaymentController extends Controller
      */
     public function requestRefund(RequestRefundRequest $request, Payment $payment)
     {
+        $user = $request->user();
+        
+        if (!$user instanceof \App\Models\Creator) {
+            return response()->json(['error' => 'Unauthorized. Creator authentication required.'], 401);
+        }
+        
         // Validate payment ownership
-        if ($payment->user_id !== $request->user()->id) {
+        if ($payment->creator_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Jobs\AssignMediaToUsersJob;
+use App\Models\Campaign;
 use App\Models\Media;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -13,16 +14,18 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Scheduled job to assign users to media that have no assignments.
+ * Scheduled job to manage media activation and assignment.
  * 
- * Runs every 6 hours to:
- * 1. Find all media where:
- *    - No UserAssignment records exist
+ * Runs every 30 minutes to:
+ * 1. Activate media when from_date is reached (UTC)
+ * 2. Find all media where:
  *    - Campaign is not complete
  *    - Payment status is 'paid'
  *    - Active is true
  *    - Media is uploaded (not pending)
- * 2. Dispatch AssignMediaToUsersJob for each media
+ *    - Within date range (from_date <= now <= to_date)
+ *    - Current round needs assignments
+ * 3. Dispatch AssignMediaToUsersJob for each eligible media
  */
 class AssignUnassignedMediaJob implements ShouldQueue
 {
@@ -33,28 +36,64 @@ class AssignUnassignedMediaJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            $unassignedMedia = Media::query()
+            $now = now()->utc();
+            
+            $activatedMedia = Media::query()
+                ->where('campaign_completed', false)
+                ->where('payment_status', 'paid')
+                ->where('mime_type', '!=', 'pending')
+                ->whereNotNull('from_date')
+                ->whereNotNull('to_date')
+                ->where('from_date', '<=', $now)
+                ->where('to_date', '>=', $now)
+                ->where('active', false)
+                ->get();
+            
+            foreach ($activatedMedia as $media) {
+                $media->update(['active' => true]);
+                
+                // Update campaign active status
+                Campaign::where('media_id', $media->id)->update(['active' => true]);
+            }
+            
+            $targetViews = (int) config('services.media.target_views', 10);
+            
+            $eligibleMedia = Media::query()
                 ->where('campaign_completed', false)
                 ->where('payment_status', 'paid')
                 ->where('active', true)
                 ->where('mime_type', '!=', 'pending')
-                ->whereNotExists(function ($query) {
-                    $query->select(DB::raw(1))
-                        ->from('user_assignments')
-                        ->whereColumn('user_assignments.media_id', 'media.id');
-                })
-                ->with(['locations', 'user'])
-                ->get();
+                ->whereNotNull('from_date')
+                ->whereNotNull('to_date')
+                ->where('from_date', '<=', $now)
+                ->where('to_date', '>=', $now)
+                ->whereRaw('rounds_completed < rounds')
+                ->with(['locations', 'creator'])
+                ->get()
+                ->filter(function ($media) use ($targetViews) {
+                    $currentRound = $media->rounds_completed + 1;
+                    $watchedCount = $media->watchedByUsers()->count();
+                    $roundsCompleted = (int) floor($watchedCount / $targetViews);
+                    
+                    if ($roundsCompleted >= $currentRound) {
+                        return false;
+                    }
+                    
+                    $currentCount = $media->assignments()->count();
+                    $neededCount = max(0, $targetViews - $currentCount);
+                    
+                    return $neededCount > 0;
+                });
 
-            if ($unassignedMedia->isEmpty()) {
-                Log::info('AssignUnassignedMediaJob: No unassigned media found');
+            if ($eligibleMedia->isEmpty()) {
+                Log::info('AssignUnassignedMediaJob: No eligible media found');
                 return;
             }
 
             $processedCount = 0;
             $failedCount = 0;
 
-            foreach ($unassignedMedia as $media) {
+            foreach ($eligibleMedia as $media) {
                 try {
                     AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
 
@@ -74,7 +113,7 @@ class AssignUnassignedMediaJob implements ShouldQueue
             }
 
             Log::info('AssignUnassignedMediaJob completed', [
-                'total_found' => $unassignedMedia->count(),
+                'total_found' => $eligibleMedia->count(),
                 'processed_count' => $processedCount,
                 'failed_count' => $failedCount,
             ]);

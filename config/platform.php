@@ -7,4 +7,9 @@ return [
     'about_creator_video_path' => env('PLATFORM_ABOUT_CREATOR_VIDEO_PATH', 'platform/about-creator-video.mp4'),
     'about_creator_video_disk' => env('PLATFORM_ABOUT_CREATOR_VIDEO_DISK', 'public'),
     'about_creator_description' => env('PLATFORM_ABOUT_CREATOR_DESCRIPTION', 'Learn how to create and share your content on Zivo. Upload videos, set rewards, and reach your audience.'),
+
+    // General platform metadata exposed (safely) via /platform-info
+    'platform_name' => env('PLATFORM_NAME', 'Zivo'),
+    'support_email' => env('PLATFORM_SUPPORT_EMAIL', 'support@example.com'),
+    'support_url' => env('PLATFORM_SUPPORT_URL', 'https://zivo.app/support'),
 ];

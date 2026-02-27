@@ -41,7 +41,33 @@ return [
     ],
 
     'media' => [
-        'target_views' => env('MEDIA_TARGET_VIEWS'),
-    ]
+        // How many views are required to complete a single round.
+        'target_views' => (int) env('MEDIA_TARGET_VIEWS', 10),
+
+        // Monetary cost per round in your main currency (e.g. USD).
+        'cost_per_round' => (float) env('MEDIA_COST_PER_ROUND', 0.25),
+
+        // Minimum and maximum rounds allowed when creators configure a campaign.
+        'min_rounds' => (int) env('MEDIA_MIN_ROUNDS', 1),
+        'max_rounds' => (int) env('MEDIA_MAX_ROUNDS', 1000000),
+
+        // Minimum and maximum number of days a campaign can run.
+        'min_campaign_days' => (int) env('MEDIA_MIN_CAMPAIGN_DAYS', 1),
+        'max_campaign_days' => (int) env('MEDIA_MAX_CAMPAIGN_DAYS', 365),
+
+        // Maximum upload size (in megabytes) for media files.
+        'max_upload_size_mb' => (int) env('MEDIA_MAX_UPLOAD_SIZE_MB', 500),
+
+        // Comma-separated list of allowed MIME types for media uploads.
+        'allowed_mime_types' => explode(
+            ',',
+            env('MEDIA_ALLOWED_MIME_TYPES', 'video/mp4,video/quicktime,image/jpeg,image/png')
+        ),
+    ],
+
+    'companies_house' => [
+        'api_key' => env('COMPANIES_HOUSE_API_KEY'),
+        'base_url' => env('COMPANIES_HOUSE_BASE_URL', 'https://api.company-information.service.gov.uk'),
+    ],
 
 ];

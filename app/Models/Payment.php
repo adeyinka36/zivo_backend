@@ -13,6 +13,7 @@ class Payment extends Model
 
     protected $fillable = [
         'user_id',
+        'creator_id',
         'media_id',
         'transaction_reference',
         'stripe_payment_intent_id',
@@ -51,6 +52,11 @@ class Payment extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(Creator::class);
     }
 
     public function media()

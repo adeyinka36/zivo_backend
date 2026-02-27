@@ -15,10 +15,11 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Job to assign media to users based on location and gender filters.
- * 
- * Uses progressive radius expansion (doubling from initial radius to 500km).
- * After 500km, falls back to random selection within 50km (no gender filter).
+ * Job to assign media to users based on location filters.
+ *
+ * Uses proximity around configured location coordinates, with a sensible
+ * radius expansion strategy. If no valid locations are present, it falls
+ * back to random selection among verified users.
  */
 class AssignMediaToUsersJob implements ShouldQueue
 {
@@ -38,7 +39,7 @@ class AssignMediaToUsersJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            $media = Media::with(['user', 'locations'])->findOrFail($this->mediaId);
+            $media = Media::with(['creator', 'locations'])->findOrFail($this->mediaId);
 
             if (!$media) {
                 Log::warning('Media not found for assignment', ['media_id' => $this->mediaId]);
@@ -54,8 +55,48 @@ class AssignMediaToUsersJob implements ShouldQueue
                 return;
             }
 
+            $now = now()->utc();
+            if ($media->from_date && $media->to_date) {
+                $fromDate = \Carbon\Carbon::parse($media->from_date)->utc();
+                $toDate = \Carbon\Carbon::parse($media->to_date)->utc();
+                
+                if ($now->lt($fromDate) || $now->gt($toDate)) {
+                    Log::info('Media is outside date range', [
+                        'media_id' => $media->id,
+                        'from_date' => $fromDate->toIso8601String(),
+                        'to_date' => $toDate->toIso8601String(),
+                        'current_time' => $now->toIso8601String(),
+                    ]);
+                    return;
+                }
+            }
+
             $targetViews = (int) config('services.media.target_views', 10);
-            $desiredCount = $targetViews * $media->rounds;
+            $currentRound = $media->rounds_completed + 1;
+            
+            if ($currentRound > $media->rounds) {
+                Log::info('All rounds completed for media', [
+                    'media_id' => $media->id,
+                    'total_rounds' => $media->rounds,
+                    'completed_rounds' => $media->rounds_completed,
+                ]);
+                return;
+            }
+
+            $watchedCount = $media->watchedByUsers()->count();
+            $roundsCompleted = (int) floor($watchedCount / $targetViews);
+            
+            if ($roundsCompleted >= $currentRound) {
+                Log::info('Current round already completed, will assign next round on next job run', [
+                    'media_id' => $media->id,
+                    'current_round' => $currentRound,
+                    'rounds_completed' => $roundsCompleted,
+                    'watched_count' => $watchedCount,
+                ]);
+                return;
+            }
+
+            $desiredCount = $targetViews;
             $currentCount = $media->assignments()->count();
             $neededCount = max(0, $desiredCount - $currentCount);
 
@@ -69,8 +110,8 @@ class AssignMediaToUsersJob implements ShouldQueue
             }
 
             $assignedUserIds = $media->assignments()->pluck('user_id')->toArray();
-            $creatorId = $media->user_id;
-            $excludeUserIds = array_unique(array_merge($assignedUserIds, [$creatorId]));
+            // Creators are separate from users, so no need to exclude creator_id
+            $excludeUserIds = $assignedUserIds;
 
             $selectedUsers = $this->selectUsers($media, $neededCount, $excludeUserIds);
 
@@ -166,19 +207,6 @@ class AssignMediaToUsersJob implements ShouldQueue
      */
     private function buildLocationContext(Media $media): ?array
     {
-        if ($media->radius !== null && $media->user && $media->user->latitude && $media->user->longitude) {
-            $lat = (float) $media->user->latitude;
-            $lng = (float) $media->user->longitude;
-            
-            if ($lat != 0.0 && $lng != 0.0 && abs($lat) <= 90 && abs($lng) <= 180) {
-                return [
-                    'center_latitude' => $lat,
-                    'center_longitude' => $lng,
-                    'initial_radius' => (float) $media->radius,
-                ];
-            }
-        }
-
         if ($media->locations && $media->locations->isNotEmpty()) {
             $location = $media->locations->first();
             $lat = (float) $location->latitude;

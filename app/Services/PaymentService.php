@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\Media;
 use App\Models\Payment;
-use App\Models\User;
+use App\Models\Creator;
 use App\Repositories\PaymentRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -27,13 +27,12 @@ class PaymentService
      */
     public function calculateExpectedPaymentAmount(Media $media): array
     {
-        $rewardAmountCents = (int) $media->reward * (int) $media->rounds;
-        $platformFeeCents = (int) round($rewardAmountCents * 0.10);
-        $totalAmountCents = $rewardAmountCents + $platformFeeCents;
+        // Fixed cost: $5 per round (500 cents per round)
+        $totalAmountCents = 500 * (int) $media->rounds;
 
         return [
-            'reward_amount_cents' => $rewardAmountCents,
-            'platform_fee_cents' => $platformFeeCents,
+            'reward_amount_cents' => $totalAmountCents,
+            'platform_fee_cents' => 0,
             'total_amount_cents' => $totalAmountCents,
         ];
     }
@@ -41,9 +40,9 @@ class PaymentService
     /**
      * Create a payment intent for media upload
      */
-    public function createPaymentIntent(Media $media, User $user): array
+    public function createPaymentIntent(Media $media, Creator $creator): array
     {
-        return DB::transaction(function () use ($media, $user) {
+        return DB::transaction(function () use ($media, $creator) {
             $existingPayment = $this->paymentRepository->findByMediaId($media->id)
                 ->where('status', Payment::STATUS_PENDING)
                 ->first();
@@ -70,7 +69,7 @@ class PaymentService
                 }
             }
 
-            $transactionReference = $this->generateTransactionReference($media->id, $user->id);
+            $transactionReference = $this->generateTransactionReference($media->id, $creator->id);
 
             try {
                 // Calculate expected payment amount from Media record (server-side)
@@ -82,7 +81,7 @@ class PaymentService
                     'currency' => config('stripe.currency'),
                     'metadata' => [
                         'media_id' => $media->id,
-                        'user_id' => $user->id,
+                        'creator_id' => $creator->id,
                         'transaction_reference' => $transactionReference,
                         'expected_amount_cents' => (string) $totalAmountCents,
                     ],
@@ -90,17 +89,18 @@ class PaymentService
                         'enabled' => true,
                     ],
                 ], [
-                    'idempotency_key' => $this->generateIdempotencyKey($media->id, $user->id),
+                    'idempotency_key' => $this->generateIdempotencyKey($media->id, $creator->id),
                 ]);
 
                 // Create payment record with expected amounts
                 $payment = $this->paymentRepository->create([
-                    'user_id' => $user->id,
+                    'creator_id' => $creator->id,
                     'media_id' => $media->id,
                     'transaction_reference' => $transactionReference,
                     'stripe_payment_intent_id' => $paymentIntent->id,
                     'status' => Payment::STATUS_PENDING,
-                    'amount' => $media->reward,
+                    // Store amount in major units (e.g. dollars)
+                    'amount' => $totalAmountCents / 100,
                     'currency' => config('stripe.currency'),
                     'gateway_response' => array_merge($paymentIntent->toArray(), [
                         'expected_amount_cents' => $totalAmountCents,
@@ -125,8 +125,7 @@ class PaymentService
                 Log::error('Stripe API error creating payment intent', [
                     'error' => $e->getMessage(),
                     'media_id' => $media->id,
-                    'user_id' => $user->id,
-                    'amount' => $media->reward,
+                    'creator_id' => $creator->id,
                 ]);
                 throw new \Exception('Failed to create payment intent: ' . $e->getMessage());
             }
@@ -157,11 +156,11 @@ class PaymentService
             Log::warning('Payment amount mismatch detected', [
                 'payment_id' => $payment->id,
                 'media_id' => $media->id,
+                'creator_id' => $payment->creator_id,
                 'user_id' => $payment->user_id,
                 'expected_amount_cents' => $expectedTotalCents,
                 'actual_amount_cents' => $actualAmountCents,
                 'difference_cents' => $actualAmountCents - $expectedTotalCents,
-                'media_reward' => $media->reward,
                 'media_rounds' => $media->rounds,
             ]);
 
@@ -321,17 +320,17 @@ class PaymentService
     /**
      * Generate unique transaction reference
      */
-    private function generateTransactionReference(string $mediaId, string $userId): string
+    private function generateTransactionReference(string $mediaId, string $creatorId): string
     {
-        return 'TXN_' . strtoupper(substr($mediaId, 0, 8)) . '_' . strtoupper(substr($userId, 0, 8)) . '_' . time();
+        return 'TXN_' . strtoupper(substr($mediaId, 0, 8)) . '_' . strtoupper(substr($creatorId, 0, 8)) . '_' . time();
     }
 
     /**
      * Generate idempotency key
      */
-    private function generateIdempotencyKey(string $mediaId, string $userId): string
+    private function generateIdempotencyKey(string $mediaId, string $creatorId): string
     {
-        return 'payment_' . $mediaId . '_' . $userId . '_' . time();
+        return 'payment_' . $mediaId . '_' . $creatorId . '_' . time();
     }
 
     /**

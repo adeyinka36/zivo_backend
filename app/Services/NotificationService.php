@@ -104,7 +104,6 @@ class NotificationService
                 'type' => 'media_upload_success',
                 'mediaId' => $media->id,
                 'mediaName' => Str::limit($media->description ?? $media->name, 15, '...'),
-                'reward' => $media->reward,
                 'screen' => 'explore'
             ],
             'sound' => 'default',
@@ -251,7 +250,6 @@ class NotificationService
                 'mediaDescription' => Str::limit($mediaDescription, 30, '...'),
                 'rounds' => $media->rounds,
                 'totalViews' => $totalViews,
-                'reward' => $media->reward,
                 'screen' => 'profile'
             ],
             'sound' => 'default',

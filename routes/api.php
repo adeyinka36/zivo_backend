@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CompaniesHouseController;
+use App\Http\Controllers\Api\CreatorAuthController;
+use App\Http\Controllers\Api\CreatorCampaignController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\PaymentController;
@@ -35,33 +38,47 @@ Route::prefix('v1')->group(function () {
         ->middleware(['signed'])
         ->name('verification.verify');
 
+    // Creator routes (public)
+    Route::post('/creators/register', [CreatorAuthController::class, 'register']);
+    Route::post('/creators/register-with-verification', [CreatorAuthController::class, 'registerWithVerification']);
+    Route::post('/creators/login', [CreatorAuthController::class, 'login']);
+    Route::get('/creators/verify-email/{id}/{hash}', [CreatorAuthController::class, 'verifyEmail'])
+        ->middleware(['signed'])
+        ->name('creators.verification.verify');
+
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/user', function (Request $request) {
-            $user = $request->user()->load('location');
+            $user = $request->user();
+            if (!$user instanceof \App\Models\User) {
+                return response()->json(['error' => 'Unauthorized. User authentication required.'], 401);
+            }
+            $user->load('location');
             return new \App\Http\Resources\UserResource($user);
-        });
-        Route::post('/logout', [AuthController::class, 'logout']);
-        Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail']);
-        Route::post('/update-email', [AuthController::class, 'updateEmail']);
+        })->middleware('ensure.user');
+        Route::post('/logout', [AuthController::class, 'logout'])->middleware('ensure.user');
+        Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail'])->middleware('ensure.user');
+        Route::post('/update-email', [AuthController::class, 'updateEmail'])->middleware('ensure.user');
 
-        Route::get('/profile', [ProfileController::class, 'show']);
-        Route::put('/profile', [ProfileController::class, 'update']);
-        Route::put('/users/push-token', [ProfileController::class, 'updatePushToken']);
-        Route::get('/user/media', [ProfileController::class, 'getUserMedia']);
-        Route::put('/users/location', [UserLocationController::class, 'update']);
+        Route::get('/profile', [ProfileController::class, 'show'])->middleware('ensure.user');
+        Route::put('/profile', [ProfileController::class, 'update'])->middleware('ensure.user');
+        Route::put('/users/push-token', [ProfileController::class, 'updatePushToken'])->middleware('ensure.user');
+        Route::get('/user/media', [ProfileController::class, 'getUserMedia'])->middleware('ensure.user');
+        Route::put('/users/location', [UserLocationController::class, 'update'])->middleware('ensure.user');
 
         Route::get('locations', [LocationController::class, 'index']);
 
         Route::get('media', [MediaController::class, 'index']);
-        Route::post('media/payment-intent', [MediaController::class, 'createPaymentIntent']);
-        Route::post('media/upload-after-payment', [MediaController::class, 'uploadAfterPayment']);
+        Route::post('media/payment-intent', [MediaController::class, 'createPaymentIntent'])->middleware('ensure.creator');
+        Route::post('media/upload-after-payment', [MediaController::class, 'uploadAfterPayment'])->middleware('ensure.creator');
         Route::get('media/{id}', [MediaController::class, 'show']);
-        Route::delete('media/{id}', [MediaController::class, 'destroy']);
+        Route::delete('media/{id}', [MediaController::class, 'destroy'])->middleware('ensure.creator');
         Route::post('media-watched/{media}/{user}', [MediaController::class, 'markAsWatched']);
 
-        Route::get('payments/{paymentId}/status', [PaymentController::class, 'getPaymentStatus']);
-        Route::get('payments/history', [PaymentController::class, 'getPaymentHistory']);
-        Route::post('payments/{payment}/refund', [PaymentController::class, 'requestRefund']);
+        Route::get('payments/{paymentId}/status', [PaymentController::class, 'getPaymentStatus'])->middleware('ensure.creator');
+        Route::get('payments/history', [PaymentController::class, 'getPaymentHistory'])->middleware('ensure.creator');
+        Route::post('payments/{payment}/refund', [PaymentController::class, 'requestRefund'])->middleware('ensure.creator');
+
+        Route::get('/creator/campaigns', [CreatorCampaignController::class, 'index'])->middleware('ensure.creator');
 
 
         Route::prefix('quiz')->group(function () {
@@ -70,6 +87,12 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('/target-views', [PlatformController::class, 'getTargetViews']);
+
+        Route::get('/companies-house/{crn}', [CompaniesHouseController::class, 'getCompanyDetails'])->middleware('ensure.creator');
+
+        Route::post('/creators/logout', [CreatorAuthController::class, 'logout'])->middleware('ensure.creator');
+        Route::get('/creators/me', [CreatorAuthController::class, 'me'])->middleware('ensure.creator');
+        Route::post('/creators/update-verification', [CreatorAuthController::class, 'updateVerification'])->middleware('ensure.creator');
     });
 
     Route::post('webhooks/stripe', [PaymentController::class, 'webhook']);

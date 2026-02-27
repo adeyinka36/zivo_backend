@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\User;
+use App\Models\Creator;
 use App\Models\Media;
 use App\Notifications\MediaUploadSuccessNotification;
 use Illuminate\Bus\Queueable;
@@ -27,7 +27,7 @@ class SendEmailNotificationJob implements ShouldQueue
     public array $backoff = [30, 60, 120];
 
     public function __construct(
-        private readonly string $userId,
+        private readonly string $creatorId,
         private readonly string $mediaId
     ) {}
 
@@ -36,27 +36,27 @@ class SendEmailNotificationJob implements ShouldQueue
      */
     public function handle(): void
     {
-        $user = User::find($this->userId);
+        $creator = Creator::find($this->creatorId);
         $media = Media::find($this->mediaId);
 
-        if (!$user || !$media) {
-            Log::warning('User or media not found for email notification', [
-                'user_id' => $this->userId,
+        if (!$creator || !$media) {
+            Log::warning('Creator or media not found for email notification', [
+                'creator_id' => $this->creatorId,
                 'media_id' => $this->mediaId
             ]);
             return;
         }
 
         try {
-            $user->notify(new MediaUploadSuccessNotification($media));
+            $creator->notify(new MediaUploadSuccessNotification($media));
             
             Log::info('Email notification sent successfully', [
-                'user_id' => $this->userId,
+                'creator_id' => $this->creatorId,
                 'media_id' => $this->mediaId
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to send email notification', [
-                'user_id' => $this->userId,
+                'creator_id' => $this->creatorId,
                 'media_id' => $this->mediaId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
@@ -72,7 +72,7 @@ class SendEmailNotificationJob implements ShouldQueue
     public function failed(Throwable $exception): void
     {
         Log::error('SendEmailNotificationJob failed permanently', [
-            'user_id' => $this->userId,
+            'creator_id' => $this->creatorId,
             'media_id' => $this->mediaId,
             'error' => $exception->getMessage(),
             'trace' => $exception->getTraceAsString()

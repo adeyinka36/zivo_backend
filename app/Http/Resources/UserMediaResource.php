@@ -9,37 +9,27 @@ class UserMediaResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        try {
-            $uploaderUsername = 'Unknown';
-            if ($this->relationLoaded('user') && $this->user) {
-                $uploaderUsername = $this->user->username ?? $this->user->name ?? 'Unknown';
-            }
-            
-            return [
-                'id' => $this->id,
-                'name' => $this->name,
-                'file_name' => $this->file_name,
-                'mime_type' => $this->mime_type,
-                'media_type' => $this->media_type ?? $this->getMediaType(),
-                'reward' => $this->reward ?? 0,
-                'url' => $this->getFileUrl() ?? '',
-                'description' => $this->description ?? '',
-                'created_at' => $this->created_at?->toISOString() ?? now()->toISOString(),
-                'updated_at' => $this->updated_at?->toISOString() ?? now()->toISOString(),
-                'has_watched' => $this->getHasWatchedAttribute(),
-                'thumbnail' => $this->getThumbnailUrl(),
-                'uploader_id' => $this->user_id,
-                'uploader_username' => $uploaderUsername,
-                'view_count' => $this->view_count ?? 0,
-            ];
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Error in UserMediaResource', [
-                'media_id' => $this->id ?? 'unknown',
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            throw $e;
+        $creatorName = 'Unknown';
+        if ($this->relationLoaded('creator') && $this->creator) {
+            $creatorName = $this->creator->business_name ?? $this->creator->name ?? 'Unknown';
         }
+        
+        return [
+            'id' => $this->id,
+            'name' => $this->name ?? '',
+            'file_name' => $this->file_name ?? '',
+            'mime_type' => $this->mime_type ?? '',
+            'media_type' => $this->media_type ?? $this->getMediaType(),
+            'url' => $this->getFileUrl() ?? '',
+            'description' => $this->offer ?? '',
+            'created_at' => $this->created_at?->toIso8601String() ?? now()->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String() ?? now()->toIso8601String(),
+            'has_watched' => $this->getHasWatchedAttribute(),
+            'thumbnail' => $this->getThumbnailUrl(),
+            'creator_id' => $this->creator_id,
+            'creator_name' => $creatorName,
+            'view_count' => $this->view_count ?? 0,
+        ];
     }
 
     private function getMediaType(): string
@@ -63,7 +53,7 @@ class UserMediaResource extends JsonResource
     private function getHasWatchedAttribute(): bool
     {
         $user = request()->user();
-        if (!$user) {
+        if (!$user || !($user instanceof \App\Models\User)) {
             return false;
         }
         

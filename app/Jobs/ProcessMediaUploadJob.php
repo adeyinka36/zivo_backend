@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Jobs\AssignMediaToUsersJob;
+use App\Models\Campaign;
 use App\Models\Media;
 use App\Models\Location;
 use App\Services\MediaService;
@@ -89,6 +90,12 @@ class ProcessMediaUploadJob implements ShouldQueue
             
             $targetViews = (int) config('services.media.target_views', 10);
             
+            $now = now()->utc();
+            $fromDate = $this->metadata['from_date'] ? \Carbon\Carbon::parse($this->metadata['from_date'])->utc() : null;
+            $toDate = $this->metadata['to_date'] ? \Carbon\Carbon::parse($this->metadata['to_date'])->utc() : null;
+            
+            $isWithinDateRange = $fromDate && $toDate && $now->gte($fromDate) && $now->lte($toDate);
+            
             $media->update([
                 'name' => $this->metadata['name'],
                 'file_name' => $this->metadata['file_name'],
@@ -97,14 +104,13 @@ class ProcessMediaUploadJob implements ShouldQueue
                 'path' => $this->filePath,
                 'disk' => $this->disk,
                 'description' => $this->metadata['description'] ?? null,
-                'reward' => $this->metadata['reward'],
                 'rounds' => $this->metadata['rounds'],
-                'radius' => $this->metadata['radius'] ?? null,
+                'from_date' => $fromDate,
+                'to_date' => $toDate,
                 'payment_status' => 'paid',
                 'paid_at' => now(),
                 'amount_paid' => $this->metadata['amount_paid'],
-                'quiz_number' => rand(1, $targetViews),
-                'active' => true,
+                'active' => $isWithinDateRange,
             ]);
 
             $mediaService = app(MediaService::class);
@@ -132,51 +138,41 @@ class ProcessMediaUploadJob implements ShouldQueue
                     'media_id' => $media->id,
                     'location_id' => $this->metadata['location_id'],
                 ]);
-            } elseif (!empty($this->metadata['radius']) && $media->user) {
-                $user = $media->user;
-                if ($user->latitude && $user->longitude) {
-                    $userLocationId = $this->getOrCreateUserLocation($user);
-                    if ($userLocationId) {
-                        $existingLocationIds = $media->locations()->pluck('locations.id')->toArray();
-                        if (!in_array($userLocationId, $existingLocationIds)) {
-                            try {
-                                $media->locations()->attach($userLocationId);
-                                Log::info('User location attached to radius-based media', [
-                                    'media_id' => $media->id,
-                                    'location_id' => $userLocationId,
-                                    'user_latitude' => $user->latitude,
-                                    'user_longitude' => $user->longitude,
-                                ]);
-                            } catch (\Exception $e) {
-                                if (str_contains($e->getMessage(), 'duplicate key') || str_contains($e->getMessage(), 'Unique violation')) {
-                                    Log::warning('User location already exists, skipping duplicate', [
-                                        'media_id' => $media->id,
-                                        'location_id' => $userLocationId,
-                                    ]);
-                                } else {
-                                    throw $e;
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             $media->refresh();
 
-            AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
+            // Create campaign entry for this media
+            Campaign::firstOrCreate(
+                [
+                    'media_id' => $media->id,
+                ],
+                [
+                    'creator_id' => $media->creator_id,
+                    'active' => $isWithinDateRange,
+                ]
+            );
 
-            Log::info('AssignMediaToUsersJob dispatched after media processing', [
-                'media_id' => $media->id,
-                'has_radius' => !empty($media->radius),
-                'has_location_id' => !empty($this->metadata['location_id']),
-            ]);
+            if ($isWithinDateRange) {
+                Log::info('Media is within date range, will be assigned by scheduled job', [
+                    'media_id' => $media->id,
+                    'from_date' => $fromDate?->toIso8601String(),
+                    'to_date' => $toDate?->toIso8601String(),
+                    'has_location_id' => !empty($this->metadata['location_id']),
+                ]);
+            } else {
+                Log::info('Media is outside date range, will be activated by scheduled job', [
+                    'media_id' => $media->id,
+                    'from_date' => $fromDate?->toIso8601String(),
+                    'to_date' => $toDate?->toIso8601String(),
+                    'current_time' => $now->toIso8601String(),
+                ]);
+            }
 
             Log::info('Media upload processed successfully', [
                 'media_id' => $media->id,
                 'file_path' => $this->filePath,
                 'disk' => $this->disk,
-                'has_radius' => !empty($media->radius),
                 'has_location_id' => !empty($this->metadata['location_id']),
             ]);
 
@@ -226,26 +222,19 @@ class ProcessMediaUploadJob implements ShouldQueue
     }
 
     /**
-     * Get or create a location record for the user's coordinates.
+     * Get location ID from coordinates (locations must be added manually to database).
      *
-     * @param \App\Models\User $user
-     * @return int|null Location ID or null if coordinates are invalid
+     * @param float $latitude
+     * @param float $longitude
+     * @return int|null Location ID or null if not found
      */
-    private function getOrCreateUserLocation($user): ?int
+    private function getOrCreateLocationFromCoordinates(float $latitude, float $longitude): ?int
     {
-        if (!$user->latitude || !$user->longitude) {
-            return null;
-        }
-
-        $lat = (float) $user->latitude;
-        $lng = (float) $user->longitude;
+        $lat = (float) $latitude;
+        $lng = (float) $longitude;
 
         if ($lat == 0.0 || $lng == 0.0 || abs($lat) > 90 || abs($lng) > 180) {
             return null;
-        }
-
-        if ($user->location_id) {
-            return $user->location_id;
         }
 
         $location = Location::where('latitude', $lat)
@@ -256,21 +245,12 @@ class ProcessMediaUploadJob implements ShouldQueue
             return $location->id;
         }
 
-        $regionName = 'User Location ' . round($lat, 4) . ',' . round($lng, 4);
-        
-        $location = Location::firstOrCreate(
-            [
-                'country' => 'Unknown',
-                'region_name' => $regionName,
-            ],
-            [
-                'latitude' => $lat,
-                'longitude' => $lng,
-                'continent' => 'Unknown',
-                'timezone' => 'UTC',
-            ]
-        );
+        Log::warning('Location not found in database', [
+            'latitude' => $lat,
+            'longitude' => $lng,
+        ]);
 
-        return $location->id;
+        return null;
     }
+
 }

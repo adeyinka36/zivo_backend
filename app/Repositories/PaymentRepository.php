@@ -17,6 +17,7 @@ class PaymentRepository
                 'payment_id' => $payment->id,
                 'transaction_reference' => $payment->transaction_reference,
                 'amount' => $payment->amount,
+                'creator_id' => $payment->creator_id,
                 'user_id' => $payment->user_id,
             ]);
             

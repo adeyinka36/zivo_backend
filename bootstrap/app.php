@@ -11,7 +11,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        $middleware->alias([
+            'ensure.creator' => \App\Http\Middleware\EnsureCreator::class,
+            'ensure.user' => \App\Http\Middleware\EnsureUser::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->render(function (\App\Exceptions\Auth\InvalidCredentialsException $e) {

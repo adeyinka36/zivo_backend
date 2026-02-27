@@ -32,7 +32,6 @@ class MediaResource extends JsonResource
             'file_name' => $this->file_name,
             'mime_type' => $this->mime_type,
             'media_type' => $this->media_type,
-            'reward' => $this->reward,
             'rounds' => $this->rounds,
             'url' => $this->getFileUrl(),
             'description' => $this->description,
@@ -40,10 +39,9 @@ class MediaResource extends JsonResource
             'updated_at' => $this->updated_at,
             'has_watched' => $hasWatched,
             'thumbnail' => $this->getThumbnailUrl(),
-            'uploader_id' => $this->user_id,
-            'uploader_username' => $this->whenLoaded('user', fn() => $this->user->username),
+            'uploader_id' => $this->creator_id,
+            'uploader_username' => $this->whenLoaded('creator', fn() => $this->creator->business_name),
             'view_count' => $this->whenLoaded('view_count', fn() => $this->view_count),
-            'quiz_number' => $this->quiz_number,
         ];
     }
 

@@ -23,6 +23,7 @@ use App\Models\Media;
 use App\Models\MediaUserWatched;
 use App\Models\Question;
 use App\Models\User;
+use App\Models\Creator;
 use App\Models\Payment;
 use App\Services\MediaService;
 use App\Services\PaymentService;
@@ -52,7 +53,7 @@ class MediaController extends Controller
 
         $currentAssignment = \App\Models\UserAssignment::where('user_id', $user->id)
             ->where('current', true)
-            ->with(['media.user'])
+            ->with(['media.creator'])
             ->first();
 
         if (!$currentAssignment || !$currentAssignment->media) {
@@ -78,10 +79,15 @@ class MediaController extends Controller
     {
         return DB::transaction(function () use ($request) {
             $data = $request->validated();
-            $user = $request->user();
+            $creator = $request->user();
+            
+            if (!$creator instanceof Creator) {
+                return response()->json(['error' => 'Unauthorized. Creator authentication required.'], 401);
+            }
+            
             $file = $request->file('file');
 
-            $media = $this->mediaService->createDraftMedia($data, $user, $file);
+            $media = $this->mediaService->createDraftMedia($data, $creator, $file);
             $tempFilePath = null;
 
             if ($file) {
@@ -112,7 +118,7 @@ class MediaController extends Controller
                 ]);
             }
 
-            $paymentResult = $this->paymentService->createPaymentIntent($media, $user);
+            $paymentResult = $this->paymentService->createPaymentIntent($media, $creator);
 
             return response()->json([
                 'payment_intent' => [
@@ -142,15 +148,12 @@ class MediaController extends Controller
             return response()->json(['error' => 'Media not found'], 404);
         }
 
-        $frontendRewardCents = (int) $request->input('reward');
         $frontendRounds = (int) $request->input('rounds');
         
-        if ($frontendRewardCents !== (int) $media->reward || $frontendRounds !== (int) $media->rounds) {
-            Log::warning('Frontend amounts mismatch Media record during upload', [
+        if ($frontendRounds !== (int) $media->rounds) {
+            Log::warning('Frontend rounds mismatch Media record during upload', [
                 'payment_id' => $payment->id,
                 'media_id' => $media->id,
-                'frontend_reward' => $frontendRewardCents,
-                'media_reward' => $media->reward,
                 'frontend_rounds' => $frontendRounds,
                 'media_rounds' => $media->rounds,
             ]);
@@ -161,6 +164,47 @@ class MediaController extends Controller
         $fileInfo = $this->resolveFilePath($media, $request->file('file'));
         if (!$fileInfo['success']) {
             return response()->json(['error' => $fileInfo['error']], 400);
+        }
+
+        // Process location_selections if provided
+        $locationIds = null;
+        if ($request->filled('location_selections')) {
+            $locationService = app(\App\Services\LocationService::class);
+            $locationIds = $locationService->expandLocationSelections($request->input('location_selections'));
+        }
+
+        // Update media with offer, dates, and location_selections
+        $updateData = [
+            'offer' => $request->input('offer'),
+            'from_date' => $request->input('from_date') ? $request->input('from_date') : null,
+            'to_date' => $request->input('to_date') ? $request->input('to_date') : null,
+        ];
+        
+        if ($request->filled('location_selections')) {
+            $updateData['location_selections'] = $request->input('location_selections');
+        }
+        
+        $media->update($updateData);
+        
+        // Attach location IDs if we have them from location_selections
+        if (!empty($locationIds)) {
+            $existingLocationIds = $media->locations()->pluck('locations.id')->toArray();
+            $newLocationIds = array_values(array_diff($locationIds, $existingLocationIds));
+            
+            if (!empty($newLocationIds)) {
+                try {
+                    $media->locations()->attach($newLocationIds);
+                } catch (\Exception $e) {
+                    if (str_contains($e->getMessage(), 'duplicate key') || str_contains($e->getMessage(), 'Unique violation')) {
+                        Log::warning('Some locations already exist, skipping duplicates', [
+                            'media_id' => $media->id,
+                            'attempted_location_ids' => $newLocationIds,
+                        ]);
+                    } else {
+                        throw $e;
+                    }
+                }
+            }
         }
 
         $metadata = $this->prepareUploadMetadata($media, $request, $targetViews);
@@ -300,12 +344,10 @@ class MediaController extends Controller
                 'file_name' => $media->file_name,
                 'mime_type' => $media->mime_type,
                 'size' => $media->size,
-                'description' => $request->input('description') ?? $media->description,
-                'reward' => (int) $media->reward,
+                'offer' => $request->input('offer') ?? $media->offer,
                 'rounds' => (int) $media->rounds,
-                'radius' => $request->has('radius') ? (int) $request->input('radius') : ($media->radius ?? null),
-                'location_id' => $request->has('location_id') && !empty($request->input('location_id')) ? $request->input('location_id') : null,
-                'quiz_number' => rand(1, $targetViews),
+                'from_date' => $request->input('from_date') ?? $media->from_date,
+                'to_date' => $request->input('to_date') ?? $media->to_date,
             ];
         }
 
@@ -314,12 +356,10 @@ class MediaController extends Controller
             'file_name' => $uploadedFile->getClientOriginalName(),
             'mime_type' => $uploadedFile->getMimeType(),
             'size' => $uploadedFile->getSize(),
-            'description' => $request->input('description') ?? $media->description,
-            'reward' => (int) $media->reward,
+            'offer' => $request->input('offer') ?? $media->offer,
             'rounds' => (int) $media->rounds,
-            'radius' => $request->has('radius') ? (int) $request->input('radius') : ($media->radius ?? null),
-            'location_id' => $request->has('location_id') && !empty($request->input('location_id')) ? $request->input('location_id') : null,
-            'quiz_number' => rand(1, $targetViews),
+            'from_date' => $request->input('from_date') ?? $media->from_date,
+            'to_date' => $request->input('to_date') ?? $media->to_date,
         ];
     }
 
@@ -376,8 +416,14 @@ class MediaController extends Controller
         $isCorrect = $userAnswer === $correctAnswer;
 
         if ($isCorrect) {
-            $media->update(['prize_won' => true]);
-            AllocateReward::dispatch($media, $request->user());
+            // Tremendous / voucher-based rewards have been removed.
+            // A correct answer now unlocks the campaign offer, which is
+            // delivered to the user via email handled elsewhere in the system.
+            Log::info('Quiz answered correctly - user unlocked offer', [
+                'media_id' => $media->id,
+                'question_id' => $question->id,
+                'user_id' => $request->user()->id,
+            ]);
         }
 
         $resultCorrectness = $isCorrect ? 'correct' : 'incorrect';

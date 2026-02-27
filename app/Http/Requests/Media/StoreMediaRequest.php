@@ -37,7 +37,6 @@ class StoreMediaRequest extends FormRequest
                 'mimes:' . implode(',', $allFormats)
             ],
             'description' => 'nullable|string|max:1000',
-            'reward' => 'nullable|integer|min:100|max:100000000000',
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:50',
             'questions.*.answer' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
@@ -53,11 +52,6 @@ class StoreMediaRequest extends FormRequest
             'file.mimes' => 'The file must be a valid image or video format. Supported formats include: JPEG, PNG, GIF, BMP, TIFF, WebP, MP4, AVI, MOV, WebM, MKV, and many others.',
             
             'description.max' => 'Description cannot exceed 1000 characters.',
-            
-            
-            'reward.min' => 'Reward must be at least $1.00 (100 cents).',
-            'reward.max' => 'Reward amount is too large.',
-            'reward.integer' => 'Reward must be a valid amount in cents.',
             
             'questions.max' => 'You can add at most 20 questions.',
             'questions.*.question.required' => 'Question text is required.',

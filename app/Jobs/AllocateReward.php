@@ -60,7 +60,7 @@ class AllocateReward implements ShouldQueue
             ],
             'reward' => [
                 'value' => [
-                    'denomination'  => ($this->media->reward) /100,
+                    'denomination'  => 0,
                     'currency_code' => 'USD',
                 ],
                 'delivery' => [
@@ -87,9 +87,6 @@ class AllocateReward implements ShouldQueue
             ->post($endpoint, $payload);
 
         $response->throw();
-
-//        $rewardAmountDollars = $this->media->reward / 100;
-//        $winner->notify(new RewardAllocationSuccessNotification($rewardAmountDollars));
 
         return $response->json();
     }

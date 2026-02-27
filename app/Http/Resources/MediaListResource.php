@@ -29,16 +29,14 @@ class MediaListResource extends JsonResource
         return [
             'id' => $this->id,
             'media_type' => $this->media_type,
-            'reward' => $this->reward,
             'rounds' => $this->rounds,
             'url' => $this->getFileUrl(),
             'description' => $this->description,
             'created_at' => $this->created_at,
             'has_watched' => $hasWatched,
             'thumbnail' => $this->getThumbnailUrl(),
-            'uploader_username' => $this->whenLoaded('user', fn() => $this->user->username),
+            'uploader_username' => $this->whenLoaded('creator', fn() => $this->creator->business_name),
             'view_count' => $this->view_count,
-            'quiz_number' => $this->quiz_number,
         ];
     }
 

@@ -13,10 +13,8 @@ class ProfileService
     {
         $user->load('location');
         
-        $media = Media::with('user')
-            ->where('user_id', $user->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        // Users no longer create media - return empty collection
+        $media = collect([]);
 
         return [
             'user' => $user,
@@ -40,11 +38,6 @@ class ProfileService
 
     public function getUserMedia(User $user, int $perPage = 20, int $page = 1)
     {
-        return Media::with('user')
-            ->where('user_id', $user->id)
-            ->where('mime_type', '!=', 'pending') // Exclude pending uploads
-            ->where('path', '!=', 'pending') // Exclude pending uploads
-            ->orderBy('created_at', 'desc')
-            ->paginate($perPage, ['*'], 'page', $page);
+        return Media::whereRaw('1 = 0')->paginate($perPage, ['*'], 'page', $page);
     }
 } 

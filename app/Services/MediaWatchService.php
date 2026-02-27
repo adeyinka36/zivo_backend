@@ -122,94 +122,9 @@ class MediaWatchService
         MediaUserWatched::where('media_id', $media->id)->delete();
     }
 
-    /**
-     * Allocate rewards for a round that completed without a winner.
-     *
-     * @param Media $media
-     * @param Collection $watchers
-     * @return void
-     */
-    public function allocateRewardsForUnwonRound(Media $media,Collection $watchers): void
-    {
-        //throw error if reward less than 100?
-
-        $reward = $media->reward;
-        $numberOfPeopleInRound = config('services.media.target_views');
-        $winnersCount = 0;
-        $winningAmount = 0;
-
-        if ($reward == 100) {
-            $winnersCount = 1;
-            $winningAmount = 100;
-        } elseif ($reward >= (config('services.media.target_views') * 100)) {
-            $reward -= ($reward % config('services.media.target_views') * 100);
-            $winningAmount = (int) ($reward / config('services.media.target_views'));
-            $winnersCount = $numberOfPeopleInRound;
-        } elseif ($reward > 100) {
-            $reward -= $reward % 100;
-            $split = (int) $reward/100;
-            $winnersCount = $split < config('services.media.target_views') ? $split : config('services.media.target_views');
-            $winningAmount = 100;
-        }
-
-        $availableWatchers = $watchers->count();
-        
-        if ($availableWatchers === 0 || !$winnersCount || !$winningAmount) {
-            Log::warning('No reward allocated for this unwon round something is wrong!', [
-                'media_id' => $media->id,
-                'reward' => $reward,
-                'winners' => $availableWatchers,
-                'winning_amount' => $winningAmount,
-                'winners_count' => $winnersCount,
-            ]);
-            return;
-        }
-
-        // Sometimes Allocating not to watchers of the media but to random active, verified users of the app. This show discourage fraud and rewards being a member of the platform
-        $randomActiveUsersToReward = User::whereNotNull('push_token')
-            ->whereNotNull('email_verified_at')
-            ->inRandomOrder()
-            ->limit($winnersCount)
-            ->get();
-
-        if($randomActiveUsersToReward->count() < $winnersCount){
-            $selectedWinners = $watchers->take($winnersCount);
-        }
-        else{
-            $selectedWinners = $randomActiveUsersToReward;
-        }
-
-
-        Log::info('Selected winners for unwon round --->', $selectedWinners->pluck('email')->toArray());
-
-        $totalPaymentMade = 0;
-
-        foreach ($selectedWinners as $winner) {
-            if($winner->email_verified_at) {
-                $totalPaymentMade += $winningAmount;
-                if($totalPaymentMade > $reward){
-                    Log::info('Amount being paid is more than reward',  [
-                        'media_id' => $media->id,
-                        'reward' => $reward,
-                        'winners' => $availableWatchers,
-                        'winning_amount' => $winningAmount,
-                        'winners_count' => $winnersCount,
-                        'total_payment_made' => $totalPaymentMade,
-                    ]);
-                    break;
-                }
-                AllocateRewardWithAmount::dispatch($winner, $winningAmount);
-                sleep(2);
-            }
-        }
-
-        Log::info('Rewards allocated for unwon round', [
-            'media_id' => $media->id,
-            'winners_count' => $winnersCount,
-            'winning_amount' => $winningAmount,
-            'total_amount' => $winnersCount * $winningAmount,
-        ]);
-    }
+    // Legacy reward allocation for unwon rounds has been removed.
+    // The new model no longer distributes monetary rewards; users
+    // unlock the creator's offer via email when they answer correctly.
 
     /**
      * Get all watchers for a media item.
@@ -220,7 +135,6 @@ class MediaWatchService
     private function getWatchersForMedia(Media $media)
     {
         $watcherIds = MediaUserWatched::where('media_id', $media->id)
-            ->where('user_id', '!=', $media->user_id)
             ->pluck('user_id')
             ->unique();
 

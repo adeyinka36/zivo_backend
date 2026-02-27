@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\User\UpdateLocationRequest;
+use App\Http\Responses\ErrorResponse;
 use App\Models\Location;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -46,6 +47,10 @@ class UserLocationController extends Controller
             $data = $request->validated();
 
             $location = $this->findOrCreateLocation($data);
+
+            if (!$location) {
+                return ErrorResponse::make('Location not found in database. Please contact support to add this location.', 404);
+            }
 
             if ($this->shouldUpdateLocation($user, $location)) {
                 $user->location_id = $location->id;
@@ -97,61 +102,52 @@ class UserLocationController extends Controller
      *                    - timezone: string
      * @return Location The existing or newly created Location model
      */
-    private function findOrCreateLocation(array $data): Location
+    /**
+     * Find location in database (locations must be added manually).
+     *
+     * @param array $data
+     * @return Location|null
+     */
+    private function findOrCreateLocation(array $data): ?Location
     {
-        return DB::transaction(function () use ($data) {
-            $regionName = $data['region_name'];
-            $country = $data['country'];
-            
-            if ($regionName === 'Unknown' || $regionName === 'User Location') {
-                $regionName = 'User Location ' . round($data['latitude'], 4) . ',' . round($data['longitude'], 4);
+        $regionName = $data['region_name'];
+        $country = $data['country'];
+        
+        if ($regionName === 'Unknown' || $regionName === 'User Location') {
+            $regionName = 'User Location ' . round($data['latitude'], 4) . ',' . round($data['longitude'], 4);
+        }
+
+        $existing = Location::where('region_name', $regionName)
+            ->where('country', $country)
+            ->first();
+
+        if ($existing) {
+            if (!$existing->country_code && isset($data['country_code'])) {
+                $existing->update(['country_code' => $data['country_code']]);
             }
-
-            $existing = Location::where('region_name', $regionName)
-                ->where('country', $country)
-                ->first();
-
-            if ($existing) {
-                if (!$existing->country_code && isset($data['country_code'])) {
-                    $existing->update(['country_code' => $data['country_code']]);
-                }
-                if ($existing->continent !== $data['continent']) {
-                    $existing->update(['continent' => $data['continent']]);
-                }
-                if ($existing->latitude == 0 && $existing->longitude == 0) {
-                    $existing->update([
-                        'latitude' => $data['latitude'],
-                        'longitude' => $data['longitude'],
-                        'timezone' => $data['timezone'],
-                    ]);
-                }
-                $existing->refresh();
-                return $existing;
+            if ($existing->continent !== $data['continent']) {
+                $existing->update(['continent' => $data['continent']]);
             }
-
-            try {
-                return Location::create([
-                    'region_name' => $regionName,
+            if ($existing->latitude == 0 && $existing->longitude == 0) {
+                $existing->update([
                     'latitude' => $data['latitude'],
                     'longitude' => $data['longitude'],
-                    'country' => $country,
-                    'country_code' => $data['country_code'] ?? null,
-                    'continent' => $data['continent'],
                     'timezone' => $data['timezone'],
                 ]);
-            } catch (\Illuminate\Database\QueryException $e) {
-                if ($e->getCode() === '23505' || str_contains($e->getMessage(), 'duplicate key')) {
-                    $existing = Location::where('region_name', $regionName)
-                        ->where('country', $country)
-                        ->first();
-                    
-                    if ($existing) {
-                        return $existing;
-                    }
-                }
-                throw $e;
             }
-        });
+            $existing->refresh();
+            return $existing;
+        }
+
+        // Location not found - must be added manually to database
+        Log::warning('Location not found in database', [
+            'region_name' => $regionName,
+            'country' => $country,
+            'latitude' => $data['latitude'] ?? null,
+            'longitude' => $data['longitude'] ?? null,
+        ]);
+
+        return null;
     }
 
     /**

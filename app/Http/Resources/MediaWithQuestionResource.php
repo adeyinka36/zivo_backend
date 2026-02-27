@@ -20,7 +20,6 @@ class MediaWithQuestionResource extends JsonResource
             'media_id' => $this->id, // Add media_id field for frontend compatibility
             'name' => $this->name,
             'file_name' => $this->file_name,
-            'reward' => $this->reward,
             'url' => $this->getFileUrl(),
             'description' => $this->description,
             'question' => $this->questions()->exists() ? new QuestionResource($this->questions()->inRandomOrder()->first()) : null,

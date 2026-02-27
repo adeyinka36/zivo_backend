@@ -15,7 +15,13 @@ class DeleteMediaRequest extends FormRequest
             return false; // Media not found
         }
         
-        return $media->user_id === $this->user()->id;
+        $creator = $this->user();
+        
+        if (!$creator instanceof \App\Models\Creator) {
+            return false; // Must be a creator
+        }
+        
+        return $media->creator_id === $creator->id;
     }
 
     public function rules(): array

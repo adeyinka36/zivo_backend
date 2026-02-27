@@ -29,11 +29,33 @@ class PlatformController extends Controller
             $aboutVideoUrl = $this->getVideoUrl($aboutVideoPath, $aboutVideoDisk, 'about');
             $creatorVideoUrl = $this->getVideoUrl($creatorVideoPath, $creatorVideoDisk, 'creator');
 
+            $mediaConfig = config('services.media', []);
+            $stripeConfig = config('stripe', []);
+
             return [
                 'video_url' => $aboutVideoUrl,
                 'creator_video_url' => $creatorVideoUrl,
                 'description' => config('platform.about_description', 'Welcome to Zivo! Pay Attention.'),
                 'creator_description' => config('platform.about_creator_description', 'Learn how to create and share your content on Zivo. Upload videos, set rewards, and get attention.'),
+                'media' => [
+                    'target_views' => (int) ($mediaConfig['target_views'] ?? 10),
+                    'cost_per_round' => (float) ($mediaConfig['cost_per_round'] ?? 0.25),
+                    'min_rounds' => (int) ($mediaConfig['min_rounds'] ?? 1),
+                    'max_rounds' => (int) ($mediaConfig['max_rounds'] ?? 1000000),
+                    'min_campaign_days' => (int) ($mediaConfig['min_campaign_days'] ?? 1),
+                    'max_campaign_days' => (int) ($mediaConfig['max_campaign_days'] ?? 365),
+                    'max_upload_size_mb' => (int) ($mediaConfig['max_upload_size_mb'] ?? 500),
+                    'allowed_mime_types' => $mediaConfig['allowed_mime_types'] ?? [],
+                ],
+                'payments' => [
+                    'currency' => $stripeConfig['currency'] ?? 'usd',
+                    'stripe_publishable_key' => $stripeConfig['publishable_key'] ?? null,
+                ],
+                'platform' => [
+                    'name' => config('platform.platform_name', 'Zivo'),
+                    'support_email' => config('platform.support_email', 'support@example.com'),
+                    'support_url' => config('platform.support_url', 'https://zivo.app/support'),
+                ],
             ];
         });
 
