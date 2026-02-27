@@ -32,12 +32,12 @@ These jobs run automatically on a schedule defined in `routes/console.php`.
   - Dispatches `SendCurrentMediaNotificationJob` for users with push notifications enabled
 
 ### 3. CleanupAndReassignMediaJob
-- **Schedule**: Daily
-- **Purpose**: Removes stale assignments and reassigns media
+- **Schedule**: Every 6 hours (`0 */6 * * *`)
+- **Purpose**: Removes stale assignments and reassigns media so users have 6 hours to watch assigned media
 - **Actions**:
   - Finds assignments that are:
     - `current = true`
-    - Created more than 24 hours ago
+    - Created more than 6 hours ago
     - Not watched (no matching record in `media_users_watched`)
   - Deletes stale assignments
   - Calls `MediaAssignmentService::assignMediaToUsers()` which dispatches `AssignMediaToUsersJob` to reassign
@@ -414,7 +414,7 @@ If answer correct: user unlocks campaign offer (delivered by email); no monetary
 - `UploadFileToS3Job` → `ProcessMediaUploadJob` → `ExpandLocationSelectionsJob` → `AssignMediaToUsersJob` (runs after locations expanded)
 ### Independent Jobs (Can run in parallel)
 - `CheckRoundCompletionJob`, `AssignCurrentMediaJob`, and `AssignUnassignedMediaJob` (all run every 6 hours, independent)
-- `CleanupAndReassignMediaJob` and `DeleteCompletedCampaignsJob` (both run daily, independent)
+- `CleanupAndReassignMediaJob` (every 6 hours) and `DeleteCompletedCampaignsJob` (daily, independent)
 - `CleanupTempUploadsJob` (runs hourly, independent)
 
 ### Job Dependencies

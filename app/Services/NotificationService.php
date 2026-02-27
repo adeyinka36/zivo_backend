@@ -148,18 +148,19 @@ class NotificationService
             return false;
         }
 
+        $assignmentWindowHours = \App\Jobs\CleanupAndReassignMediaJob::ASSIGNMENT_WINDOW_HOURS;
         $expirationTime = null;
         $expirationText = '';
-        
+
         if ($assignment && $assignment->created_at) {
-            $expirationTime = $assignment->created_at->copy()->addHours(24);
+            $expirationTime = $assignment->created_at->copy()->addHours($assignmentWindowHours);
         } else {
-            $expirationTime = now()->addHours(24);
+            $expirationTime = now()->addHours($assignmentWindowHours);
         }
-        
+
         $expirationText = $this->formatExpirationTime($expirationTime);
 
-        $body = 'You have new media to watch. PLEASE WATCH BEFORE ' . $expirationText . '. You may need to refresh the home screen to see it.';
+        $body = 'You have new media to watch. Please watch within ' . $assignmentWindowHours . ' hours (before ' . $expirationText . '). You may need to refresh the home screen to see it.';
 
         $payload = [
             'to' => $user->push_token,

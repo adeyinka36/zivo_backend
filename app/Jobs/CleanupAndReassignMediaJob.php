@@ -15,15 +15,18 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Scheduled job to cleanup stale media assignments and reassign.
- * 
- * Runs every 24 hours to:
- * 1. Find assignments that are unwatched, current, and older than 24 hours
+ *
+ * Runs every 6 hours to:
+ * 1. Find assignments that are unwatched, current, and older than 6 hours
  * 2. Delete those stale assignments
  * 3. Reassign media to reach the target count
  */
 class CleanupAndReassignMediaJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    /** Number of hours a user has to watch assigned media before it is reassigned. */
+    public const ASSIGNMENT_WINDOW_HOURS = 6;
 
     public int $tries = 3;
 
@@ -32,7 +35,7 @@ class CleanupAndReassignMediaJob implements ShouldQueue
      */
     public function handle(MediaAssignmentService $assignmentService): void
     {
-        $cutoffTime = now()->subHours(24);
+        $cutoffTime = now()->subHours(self::ASSIGNMENT_WINDOW_HOURS);
 
         $staleAssignments = UserAssignment::where('current', true)
             ->where('created_at', '<', $cutoffTime)
