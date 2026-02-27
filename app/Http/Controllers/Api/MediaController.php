@@ -15,6 +15,7 @@ use App\Http\Resources\MediaResource;
 use App\Http\Resources\MediaListResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
+use App\Jobs\SendRewardEmailJob;
 use App\Jobs\ProcessMediaUploadJob;
 use App\Jobs\UploadFileToS3Job;
 use App\Services\MediaWatchService;
@@ -366,7 +367,7 @@ class MediaController extends Controller
     public function processQuizResult(QuizResultRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $media = Media::find($data['media_id']);
+        $media = Media::with(['creator', 'locations', 'codes'])->find($data['media_id']);
 
         if (!$media) {
             return response()->json(['message' => 'Media not found'], 404);
@@ -416,14 +417,39 @@ class MediaController extends Controller
         $isCorrect = $userAnswer === $correctAnswer;
 
         if ($isCorrect) {
-            // Tremendous / voucher-based rewards have been removed.
-            // A correct answer now unlocks the campaign offer, which is
-            // delivered to the user via email handled elsewhere in the system.
+            $user = $request->user();
+
             Log::info('Quiz answered correctly - user unlocked offer', [
                 'media_id' => $media->id,
                 'question_id' => $question->id,
-                'user_id' => $request->user()->id,
+                'user_id' => $user?->id,
             ]);
+
+            if ($user instanceof \App\Models\User) {
+                \Illuminate\Support\Facades\DB::transaction(function () use ($media, $user) {
+                    $code = \App\Models\CampaignCode::where('media_id', $media->id)
+                        ->whereNull('user_id')
+                        ->orderBy('created_at')
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($code) {
+                        $code->update([
+                            'user_id' => $user->id,
+                            'assigned_at' => now(),
+                        ]);
+
+                        SendRewardEmailJob::dispatch($user->id, $media->id, $code->code)->afterCommit();
+                    } else {
+                        \Illuminate\Support\Facades\Log::warning('No available campaign codes when awarding reward', [
+                            'media_id' => $media->id,
+                            'user_id' => $user->id,
+                        ]);
+
+                        SendRewardEmailJob::dispatch($user->id, $media->id, null)->afterCommit();
+                    }
+                });
+            }
         }
 
         $resultCorrectness = $isCorrect ? 'correct' : 'incorrect';

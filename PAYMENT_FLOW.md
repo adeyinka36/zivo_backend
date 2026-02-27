@@ -20,9 +20,11 @@ This document explains how payments work across the Zivo platform: backend, web 
 
 Zivo uses **Stripe** as the payment gateway. The payment flow follows an upload-before-payment approach:
 
-1. **File Upload & Payment Intent Creation**: User provides metadata and file, file is uploaded to temporary storage and verified, then payment intent is created
-2. **Payment Processing**: User completes payment via Stripe
-3. **Media Processing After Payment**: After successful payment, the pre-uploaded temp file is used for processing
+1. **File Upload & Payment Intent Creation**: Creator provides metadata and file; file is uploaded to temporary storage and verified; payment intent is created (creator is the payer).
+2. **Payment Processing**: Creator completes payment via Stripe.
+3. **Media Processing After Payment**: After successful payment, the pre-uploaded temp file is used for processing.
+
+Payments are **creator** payments: the authenticated payer is a `Creator`; the Payment record stores `creator_id` (and optionally `user_id` for legacy). Endpoints such as payment status, history, and refund require creator authentication.
 
 This design ensures:
 - **File upload completes before payment** - No payment is taken if upload fails
@@ -32,15 +34,13 @@ This design ensures:
 
 ### Payment Calculation
 
-The total payment amount is calculated as:
-- **Reward Amount** = `reward` (per round) × `rounds`
-- **Platform Fee** = 10% of reward amount
-- **Total Amount** = Reward Amount + Platform Fee
+The total payment amount is calculated on the backend from the Media record:
+- **Cost per round** is configurable via `MEDIA_COST_PER_ROUND` (in major currency units, e.g. dollars). The backend may use a fixed cents-per-round value (e.g. 500 cents = $5 per round) until config is wired.
+- **Total Amount** = (cost per round in cents) × `rounds`
+- **Platform Fee** = 0 (no separate platform fee in the current formula)
 
-**Example**: If reward is $10 and rounds is 2:
-- Reward Amount = $10 × 2 = $20
-- Platform Fee = $20 × 0.10 = $2
-- Total Amount = $22
+**Example**: If cost per round is $5 (500 cents) and rounds is 2:
+- Total Amount = 500 × 2 = 1000 cents ($10)
 
 ---
 
@@ -160,11 +160,12 @@ PaymentService.createPaymentIntent(metadata, file)
 POST /api/media/payment-intent
     Body: FormData {
         file: File (required),
-        reward: number,
         rounds: number,
-        locations: array,
+        offer: string,
+        from_date, to_date,
+        location_selections or location_id,
         questions: array,
-        description: string
+        ...
     }
     ↓
 Backend: MediaController::createPaymentIntent()
@@ -185,11 +186,11 @@ Updates Media record:
     - temp_file_path = path to temp file
     - name, file_name, mime_type, size from uploaded file
     ↓
-PaymentService::createPaymentIntent()
-    - Checks for existing pending payment
-    - Calculates expected amounts (server-side)
-    - Creates Stripe PaymentIntent
-    - Creates Payment record
+PaymentService::createPaymentIntent(Media $media, Creator $creator)
+    - Checks for existing pending payment for this media
+    - Calculates expected amount (server-side): cost per round × rounds
+    - Creates Stripe PaymentIntent (metadata: media_id, creator_id, ...)
+    - Creates Payment record (creator_id, media_id, status pending, amount, ...)
     - Returns client_secret and payment_id
     ↓
 Frontend receives response
@@ -238,11 +239,11 @@ POST /api/media/upload-after-payment
     Body: FormData {
         payment_id: string,
         file: File (optional - only if not pre-uploaded),
-        reward: number,
+        offer, from_date, to_date,
         rounds: number,
-        description: string,
-        location_selections: array,
-        questions: array
+        location_selections or location_id,
+        questions: array,
+        ...
     }
     ↓
 Backend: MediaController::uploadAfterPayment()
@@ -281,7 +282,7 @@ Dependent jobs dispatched independently:
     ↓
 Returns success response
     ↓
-Frontend navigates to profile page
+Frontend navigates to campaigns (or profile) page
 ```
 
 ---
@@ -297,12 +298,12 @@ Frontend navigates to profile page
 1. **`calculateExpectedPaymentAmount(Media $media)`**
    - Calculates payment amount from Media record (server-side)
    - Returns: `['reward_amount_cents', 'platform_fee_cents', 'total_amount_cents']`
-   - Formula: `reward × rounds + (reward × rounds × 0.10)`
+   - Formula: cost per round (e.g. from `config('services.media.cost_per_round')` or fixed cents) × `rounds`; platform fee currently 0
 
-2. **`createPaymentIntent(Media $media, User $user)`**
-   - Checks for existing pending payment (prevents duplicates)
-   - Creates Stripe PaymentIntent with metadata
-   - Creates Payment record in database
+2. **`createPaymentIntent(Media $media, Creator $creator)`**
+   - Checks for existing pending payment for this media (prevents duplicates)
+   - Creates Stripe PaymentIntent with metadata (media_id, creator_id, ...)
+   - Creates Payment record with `creator_id`, `media_id`, status pending, amount
    - Returns `client_secret` and `payment_id`
    - Uses idempotency key to prevent duplicate intents
 
@@ -343,16 +344,16 @@ Frontend navigates to profile page
      - `payment_intent.canceled` → `handlePaymentFailure()`
 
 2. **`GET /api/payments/{paymentId}/status`**
-   - Returns payment status for polling
-   - Response: `{ payment_id, status, amount, currency, paid_at, failure_reason }`
+   - Returns payment status for polling (creator-authenticated)
+   - Queries by `creator_id`; returns `{ payment_id, status, amount, currency, paid_at, failure_reason }`
 
 3. **`GET /api/payments/history`**
-   - Returns user's payment history
+   - Returns creator's payment history (creator-authenticated)
    - Supports pagination and filtering (status, date range)
 
-4. **`POST /api/payments/{paymentId}/refund`**
-   - Processes refund request
-   - Validates payment ownership
+4. **`POST /api/payments/{payment}/refund`**
+   - Processes refund request (creator-authenticated)
+   - Validates payment ownership via `creator_id`
    - Returns refund details
 
 ### MediaController
@@ -435,7 +436,7 @@ Frontend navigates to profile page
 
 #### Flow
 
-1. User fills form (reward, rounds, locations, questions, description)
+1. Creator fills form (offer, rounds, dates, locations, questions, file)
 2. `handlePayment()` called on "Pay" button click
 3. Validates form
 4. Calls `PaymentService.createPaymentIntent()`
@@ -444,7 +445,7 @@ Frontend navigates to profile page
 7. `handlePaymentSuccess()` called
 8. Polls payment status
 9. When succeeded, calls `uploadMediaAfterPayment()`
-10. Navigates to profile page
+10. Navigates to campaigns (or profile) page
 
 ### PaymentForm
 
@@ -500,7 +501,7 @@ Same as web app, but uses React Native API client.
   - Polls payment status
   - When succeeded, uploads media
   - Shows success modal
-  - Navigates to profile page
+  - Navigates to campaigns or profile
 
 #### Payment Methods
 
@@ -564,8 +565,8 @@ Same as web app, but uses React Native API client.
    - Stripe requires HTTPS for production
 
 3. **Token-Based Authentication**
-   - All payment endpoints require authentication
-   - User can only access their own payments
+   - Payment creation and upload use creator auth (`ensure.creator`)
+   - Status, history, and refund require creator auth; payments are keyed by `creator_id`
 
 ---
 
@@ -657,7 +658,7 @@ POST /api/payments/{paymentId}/refund
         reason: string
     }
     ↓
-Backend validates payment ownership
+Backend validates payment ownership (creator_id)
     ↓
 PaymentService::processRefund()
     ↓
@@ -672,7 +673,7 @@ Returns refund details
 
 - Payment must be successful (`status = 'succeeded'`)
 - Payment must have `stripe_charge_id`
-- User must own the payment
+- Creator must own the payment (`creator_id` matches authenticated creator)
 
 ### Refund Types
 
@@ -708,13 +709,14 @@ failed
 ### Payment Model
 
 - `id`: UUID
-- `user_id`: Foreign key to users
+- `creator_id`: Foreign key to creators (payer for campaign uploads)
+- `user_id`: Optional, legacy
 - `media_id`: Foreign key to media
 - `transaction_reference`: Unique transaction reference
 - `stripe_payment_intent_id`: Stripe PaymentIntent ID
 - `stripe_charge_id`: Stripe Charge ID (after payment)
 - `status`: `pending`, `succeeded`, `failed`, `refunded`
-- `amount`: Reward amount (not total)
+- `amount`: Total amount (e.g. in major currency units)
 - `currency`: Currency code (e.g., 'usd')
 - `paid_at`: Timestamp when payment succeeded
 - `failure_reason`: Reason for failure
@@ -723,10 +725,10 @@ failed
 
 ### Media Model (Payment-Related Fields)
 
-- `reward`: Reward amount per round
-- `rounds`: Number of rounds
+- `rounds`: Number of rounds (used with cost per round for total amount)
 - `mime_type`: Set to 'pending' before upload
 - `size`: Set to 0 before upload
+- No `reward` field; pricing is cost per round from config × rounds
 
 ---
 
@@ -735,14 +737,14 @@ failed
 ### Environment Variables
 
 **Backend**:
-- `STRIPE_KEY`: Stripe publishable key
-- `STRIPE_SECRET`: Stripe secret key
+- `STRIPE_PUBLISHABLE_KEY`: Stripe publishable key
+- `STRIPE_SECRET_KEY`: Stripe secret key
 - `STRIPE_WEBHOOK_SECRET`: Webhook signing secret
 - `STRIPE_CURRENCY`: Currency code (default: 'usd')
+- `MEDIA_COST_PER_ROUND`: Optional; cost per round in major currency (e.g. 0.25 for $0.25). If not set, backend may use a fixed cents-per-round (e.g. 500 cents).
 
 **Frontend**:
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`: Stripe publishable key (web)
-- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`: Stripe publishable key (mobile)
+- Publishable key can be read from `/platform-info` (`payments.stripe_publishable_key`) or from env (e.g. `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`)
 
 ### Stripe Configuration
 

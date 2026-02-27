@@ -20,6 +20,11 @@ class CreatorCampaignResource extends JsonResource
         $targetViewsPerRound = (int) config('services.media.target_views', 10);
         $totalTargetViews = $this->rounds * $targetViewsPerRound;
 
+        $codes = $this->codes()->with('user')->orderBy('created_at')->get();
+        $totalCodes = $codes->count();
+        $usedCodes = $codes->whereNotNull('user_id')->count();
+        $availableCodes = $totalCodes - $usedCodes;
+
         $now = now();
         $status = 'active';
 
@@ -56,6 +61,19 @@ class CreatorCampaignResource extends JsonResource
             'created_at' => $this->created_at,
             'status' => $status,
             'progress_percentage' => $progress,
+            'codes_summary' => [
+                'total' => $totalCodes,
+                'used' => $usedCodes,
+                'available' => $availableCodes,
+            ],
+            'codes' => $codes->map(function ($code) {
+                return [
+                    'code' => $code->code,
+                    'assigned' => (bool) $code->user_id,
+                    'assigned_to' => $code->user?->email,
+                    'assigned_at' => $code->assigned_at,
+                ];
+            }),
         ];
     }
 }

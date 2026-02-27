@@ -108,6 +108,11 @@ class Media extends Model
         return $this->hasOne(Campaign::class);
     }
 
+    public function codes(): HasMany
+    {
+        return $this->hasMany(CampaignCode::class);
+    }
+
     public function getWatchCount(): int
     {
         return $this->watches()->count();

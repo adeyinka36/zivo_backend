@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Jobs\AssignMediaToUsersJob;
+use App\Jobs\GenerateCampaignCodesJob;
 use App\Models\Campaign;
 use App\Models\Media;
 use App\Models\Location;
@@ -152,6 +153,9 @@ class ProcessMediaUploadJob implements ShouldQueue
                     'active' => $isWithinDateRange,
                 ]
             );
+
+            // Generate reward codes for this campaign (one per target view)
+            GenerateCampaignCodesJob::dispatch($media->id);
 
             if ($isWithinDateRange) {
                 Log::info('Media is within date range, will be assigned by scheduled job', [

@@ -16,15 +16,15 @@ This document maps out all jobs, events, and their triggers in the Zivo backend 
 These jobs run automatically on a schedule defined in `routes/console.php`.
 
 ### 1. CheckRoundCompletionJob
-- **Schedule**: Every 6 hours (`0 */6 * * *`)
+- **Schedule**: Every 3 hours (`0 */3 * * *`)
 - **Purpose**: Finds media with completed rounds and processes them
 - **Actions**:
-  - Queries media where watch count equals `target_views`
+  - Queries media where watch count equals `target_views` (from `config('services.media.target_views')`)
   - Excludes media where campaign is already complete
   - Dispatches `ProcessRoundCompletionJob` for each eligible media
 
 ### 2. AssignCurrentMediaJob
-- **Schedule**: Every 6 hours (`0 */6 * * *`)
+- **Schedule**: Every 2 hours (`0 */2 * * *`)
 - **Purpose**: Ensures each user has exactly one "current" media assignment
 - **Actions**:
   - Finds users who have assignments but no current assignment
@@ -44,25 +44,23 @@ These jobs run automatically on a schedule defined in `routes/console.php`.
 
 ### 4. DeleteCompletedCampaignsJob
 - **Schedule**: Daily
-- **Purpose**: Deletes completed campaigns from database and storage
+- **Purpose**: Deletes completed or expired campaigns from database and storage after sending a completion email
 - **Actions**:
-  - Finds all media where `campaign_completed = true`
-  - Deletes media files from S3/local storage via `MediaService::delete()`
-  - Deletes media records from database
+  - Finds all media where any of:
+    - `campaign_completed = true`, OR
+    - `to_date` is set and more than 24 hours in the past (UTC), OR
+    - `target_reached_at` is set and more than 24 hours in the past (UTC)
+  - For each media: determines reason (`completed`, `expired`, or `target_reached`), marks `campaign_completed = true` if not already, dispatches `SendCampaignCompletionEmailJob` with that reason, then deletes media via `MediaService::delete()`
   - Continues processing even if individual deletions fail
   - Logs deletion statistics
 
 ### 5. AssignUnassignedMediaJob
-- **Schedule**: Every 6 hours (`0 */6 * * *`)
-- **Purpose**: Assigns users to media that have no assignments
+- **Schedule**: Every 30 minutes
+- **Purpose**: Activates media when their window starts, and assigns users to media that need more assignments
 - **Actions**:
-  - Finds media where:
-    - No UserAssignment records exist
-    - Campaign is not complete
-    - Payment status is 'paid'
-    - Active is true
-    - Media is uploaded (not pending)
-  - Dispatches `AssignMediaToUsersJob` for each media (via `MediaAssignmentService::assignMediaToUsers()`)
+  - **Activation**: Finds media where `from_date <= now <= to_date`, `active = false`, payment paid and uploaded; sets `active = true` and updates related `Campaign` to `active = true`
+  - **Assignment**: Finds media where campaign not complete, payment 'paid', active, uploaded, within date range, and current round needs more assignments (based on `target_views` and assignment count)
+  - Dispatches `AssignMediaToUsersJob` for each eligible media
   - Logs processing results and handles errors gracefully
 
 ### 6. media:track-failed-uploads
@@ -116,11 +114,13 @@ These jobs are dispatched programmatically in response to user actions or other 
 #### 3. ProcessMediaUploadJob
 - **Triggered**: Dispatched by `UploadFileToS3Job` after file upload completes
 - **Dispatch**: Dispatched from `UploadFileToS3Job` with `afterCommit()`
-- **Purpose**: Processes the uploaded media file
+- **Purpose**: Processes the uploaded media file and creates campaign record
 - **Actions**:
-  - Stores media metadata
+  - Stores media metadata (path, disk, mime_type, etc.)
   - Processes questions if provided
   - Updates media with path, disk, mime_type, and marks as active and payment_status as 'paid'
+  - Creates or updates a `Campaign` record for the media (creator_id, media_id, active)
+  - Attaches location_id to media when applicable (no radius-based logic)
   - **Note**: Dependent jobs are dispatched automatically via Media model's `updated` event after the database transaction commits
 
 #### 4. GenerateThumbnailJob
@@ -132,66 +132,57 @@ These jobs are dispatched programmatically in response to user actions or other 
 - **Note**: Runs independently - if it fails, other jobs continue
 
 #### 5. AssignMediaToUsersJob
-- **Triggered**: Dispatched by Media model's `updated` event (if no location IDs or radius) or by `ProcessMediaUploadJob` (if location IDs exist) or by `ExpandLocationSelectionsJob` (after location expansion)
+- **Triggered**: Dispatched by Media model's `updated` event (if no location IDs), by `ProcessMediaUploadJob` (if location IDs exist), by `ExpandLocationSelectionsJob` (after location expansion), by `ProcessRoundCompletionJob` (after resetting assignments for new round), by `AssignUnassignedMediaJob` (scheduled), or by `CleanupAndReassignMediaJob` (via `MediaAssignmentService`)
 - **Dispatch**: Dispatched from Media model event listener or directly from other jobs
-- **Purpose**: Assigns media to users to reach target count based on location and gender filters
-- **Prerequisites**: Media is already active and payment_status is 'paid' (guaranteed by ProcessMediaUploadJob)
+- **Purpose**: Assigns media to users to reach target view count (from `config('services.media.target_views')`)
+- **Prerequisites**: Media is already active and payment_status is 'paid'
 - **Actions**:
-  - Selects users using progressive radius expansion (doubling from initial radius to 500km)
-  - Applies gender filter if media targets specific gender (excludes null/not_saying)
-  - Falls back to random selection within 50km if radius reaches 500km (no gender filter in fallback)
+  - Selects users (location-based when media has locations; otherwise general assignment)
   - Creates `UserAssignment` records
   - Marks assignments as `current = true` if user has no current assignment
-- **Note**: Runs independently - if it fails, other jobs continue
+- **Note**: Single job used for all assignment scenarios; runs independently
 
 #### 6. SendPushNotificationJob
 - **Triggered**: Dispatched by Media model's `updated` event
 - **Dispatch**: Dispatched from Media model event listener
 - **Purpose**: Sends push notifications about new media upload
-- **Prerequisites**: User and media exist (guaranteed by ProcessMediaUploadJob)
-- **Actions**:
-  - Sends upload success notification to creator
-  - Sends notification to all subscribed users about new media
+- **Actions**: Sends upload success notification to creator; sends notification to subscribed users about new media
 - **Note**: Runs independently - if it fails, other jobs continue
+
+#### 7. SendEmailNotificationJob
+- **Triggered**: Dispatched by Media model's `updated` event when creator_id exists
+- **Purpose**: Sends email to creator when media upload has been processed successfully
 
 ### Round Completion Flow
 
-#### 7. ProcessRoundCompletionJob
-- **Triggered**: By `CheckRoundCompletionJob` (scheduled every 6 hours)
-- **Purpose**: Processes a completed round for a media item
+#### 8. ProcessRoundCompletionJob
+- **Triggered**: By `CheckRoundCompletionJob` (scheduled every 3 hours)
+- **Purpose**: Processes a completed round for a media item and handles campaign completion
 - **Actions**:
-  - Verifies round is complete
+  - Verifies round is complete (watch count equals `target_views`)
   - If campaign not complete:
-    - Increments `rounds_completed`
+    - Increments `rounds_completed` only
     - Resets watches (deletes `MediaUserWatched` records)
     - Resets assignments (deletes `UserAssignment` records)
-    - Reassigns media via `MediaAssignmentService::assignMediaToUsers()` which dispatches `AssignMediaToUsersJob`
+    - Dispatches `AssignMediaToUsersJob` directly
   - If campaign complete:
+    - Sets `target_reached_at` if not already set; dispatches `SendCampaignCompletionEmailJob` with reason `target_reached`
     - Marks campaign as complete
-    - Sends push notification to uploader via `NotificationService::sendCampaignCompletionNotification()`
+    - Dispatches `SendCampaignCompletionEmailJob` with reason `completed` if not already notified
 
-### Quiz Flow
+### Quiz and Offer Flow
 
-#### 8. AllocateReward
-- **Triggered**: When user answers quiz correctly (`MediaController::submitQuizResult`)
-- **Purpose**: Allocates reward to user who won the quiz
-- **Condition**: Only dispatched if answer is correct
+- **Quiz**: Every first-time watch of media that has a question triggers a quiz for the user.
+- **Correct answer**: No Tremendous or voucher reward. A correct answer unlocks the campaign's **offer**, delivered to the user by email. `AllocateReward` job exists but does not allocate monetary rewards.
 
-#### 9. AllocateRewardWithAmount
-- **Triggered**: When round completes without a winner (`MediaWatchService::allocateRewardsForUnwonRound`)
-- **Purpose**: Allocates reward to randomly selected users
-- **Actions**:
-  - Distributes reward among active verified users
-  - Dispatched for each winner
-
-#### 10. QuizInvitation
+#### 9. QuizInvitation
 - **Triggered**: By `QuizManager` command (scheduled separately)
 - **Purpose**: Sends quiz invitations for eligible media
 - **Condition**: Media must have been created more than 6 hours ago and have been watched
 
 ### Notification Jobs
 
-#### 11. SendCurrentMediaNotificationJob
+#### 10. SendCurrentMediaNotificationJob
 - **Triggered**: Multiple sources (see [Event Triggers](#event-triggers))
 - **Purpose**: Sends push notification when media becomes current or is removed
 - **Types**:
@@ -233,9 +224,10 @@ These jobs are dispatched programmatically in response to user actions or other 
   - `active` is `true`
 - **Action**: Dispatches dependent jobs:
   - `GenerateThumbnailJob` (if `mime_type` starts with `video/`)
-  - `AssignMediaToUsersJob` (only if no location IDs and no radius)
-  - `SendPushNotificationJob` (if `user_id` exists)
-- **Note**: This ensures dependent jobs only run after the database transaction commits and the media is fully processed
+  - `AssignMediaToUsersJob` (only if no location IDs exist on the media)
+  - `SendEmailNotificationJob` (if `creator_id` exists)
+  - `SendPushNotificationJob` (if creator exists)
+- **Note**: Dependent jobs run after the database transaction commits and the media is fully processed
 
 ---
 
@@ -269,73 +261,42 @@ UploadFileToS3Job::dispatch() (afterCommit)
 UploadFileToS3Job uploads file to S3 and dispatches:
     - ProcessMediaUploadJob (afterCommit)
     ↓
-ProcessMediaUploadJob updates Media record:
-    - path, disk, mime_type, etc.
-    - payment_status = 'paid'
-    - active = true
+ProcessMediaUploadJob updates Media record and creates Campaign:
+    - path, disk, mime_type, payment_status = 'paid', active = true
+    - Campaign::firstOrCreate(media_id, creator_id, active)
     ↓
 ProcessMediaUploadJob dispatches (if location_selections exist):
     - ExpandLocationSelectionsJob (afterCommit)
     ↓
 Media model's updated event fires (after DB commit)
     ↓
-Event listener detects transition from pending → processed
-    ↓
-Dispatches dependent jobs independently:
-    GenerateThumbnailJob           → Generate thumbnail (if video)
-    AssignMediaToUsersJob          → Assign to users (only if no location IDs and no radius)
-    SendPushNotificationJob        → Notify creator
-    SendEmailNotificationJob       → Email creator
+Dispatches: GenerateThumbnailJob (if video), AssignMediaToUsersJob (only if no location IDs),
+    SendPushNotificationJob, SendEmailNotificationJob
     
-ProcessMediaUploadJob also dispatches (if location_id exists):
-    - AssignMediaToUsersJob (after location_id is attached)
+ProcessMediaUploadJob attaches location_id when applicable; ExpandLocationSelectionsJob expands
+    location_selections and dispatches AssignMediaToUsersJob after locations synced.
     
-ExpandLocationSelectionsJob (runs after ProcessMediaUploadJob succeeds, if location_selections exist):
-    - Expands location selections using batch operations
-    - Creates/finds locations in database (500 per chunk)
-    - Associates locations with media (using attach for new locations)
-    - Dispatches AssignMediaToUsersJob after locations are synced
-    
-Note: 
-- File upload happens BEFORE payment, ensuring upload completes before payment is taken
-- If upload fails, payment intent is not created (transaction rollback)
-- Temp files are cleaned up after 24 hours by CleanupTempUploadsJob
-- ExpandLocationSelectionsJob is dispatched by ProcessMediaUploadJob after media processing succeeds
-- This ensures location expansion only happens after media is fully processed and payment_status is 'paid'
-- If location_id exists: ProcessMediaUploadJob dispatches AssignMediaToUsersJob directly after attaching location
-- If location_selections exist: ExpandLocationSelectionsJob dispatches AssignMediaToUsersJob after locations are synced
-- If no location IDs and no radius: Media model event dispatches AssignMediaToUsersJob directly
-- This ensures locations are available when AssignMediaToUsersJob runs
-- If one job fails, others continue processing
+Note: File upload happens before payment. Temp files cleaned after 24h by CleanupTempUploadsJob.
 ```
 
 ### Round Completion Flow
 
 ```
-CheckRoundCompletionJob (every 6 hours)
+CheckRoundCompletionJob (every 3 hours)
     ↓
 Finds media with watch_count = target_views
     ↓
 For each media:
     ProcessRoundCompletionJob
         ↓
-    If round complete:
+    If round complete (campaign not complete):
         - Increment rounds_completed
-        - Delete all MediaUserWatched records
-        - Delete all UserAssignment records
+        - Delete MediaUserWatched and UserAssignment records
         - AssignMediaToUsersJob::dispatch()
-            ↓
-        Selects users based on location and gender filters
-            ↓
-        Creates new assignments
-            ↓
-        For users without current assignment:
-            - Mark assignment as current = true
     If campaign complete:
+        - Set target_reached_at; SendCampaignCompletionEmailJob (reason: target_reached)
         - Mark campaign_completed = true
-        - NotificationService::sendCampaignCompletionNotification()
-            ↓
-        Uploader receives push notification
+        - SendCampaignCompletionEmailJob (reason: completed)
 ```
 
 ### Campaign Deletion Flow
@@ -343,9 +304,12 @@ For each media:
 ```
 DeleteCompletedCampaignsJob (daily)
     ↓
-Finds all media where campaign_completed = true
+Finds media where: campaign_completed = true OR to_date > 24h ago OR target_reached_at > 24h ago
     ↓
 For each media:
+    Determine reason (completed | expired | target_reached)
+    Mark campaign_completed = true if not already
+    SendCampaignCompletionEmailJob::dispatch(creator_id, media_id, reason)
     MediaService::delete()
         ↓
     - Delete file from S3/local storage
@@ -356,30 +320,26 @@ For each media:
 ### Unassigned Media Flow
 
 ```
-AssignUnassignedMediaJob (every 6 hours)
+AssignUnassignedMediaJob (every 30 minutes)
     ↓
-Finds media with no assignments where:
-    - campaign_completed = false
-    - payment_status = 'paid'
-    - active = true
-    - mime_type != 'pending'
-    - No UserAssignment records exist
+Activation: media where from_date <= now <= to_date, active = false
+    → Set active = true, Campaign active = true
+    ↓
+Finds media where:
+    - campaign_completed = false, payment_status = 'paid', active = true
+    - mime_type != 'pending', within from_date/to_date
+    - Current round needs more assignments (vs target_views)
     ↓
 For each media:
     AssignMediaToUsersJob::dispatch()
         ↓
-    Selects users based on location and gender filters
-        ↓
-    Creates assignments
-        ↓
-    For users without current assignment:
-        - Mark assignment as current = true
+    Creates assignments; marks current = true where user has no current
 ```
 
 ### Current Assignment Flow
 
 ```
-AssignCurrentMediaJob (every 6 hours)
+AssignCurrentMediaJob (every 2 hours)
     ↓
 Finds users without current assignment
     ↓
@@ -391,23 +351,20 @@ For each user:
     SendCurrentMediaNotificationJob (via model observer)
 ```
 
-### Quiz Flow
+### Quiz and Offer Flow
 
 ```
-User watches media
+User watches media (first time)
     ↓
 MediaWatchService::markAsWatched()
     ↓
-If watch_count == quiz_number:
-    - Returns quiz data to frontend
-    - Frontend shows quiz
-        ↓
+If media has question(s): returns quiz data to frontend; frontend shows quiz
+    ↓
 User submits answer
     ↓
-MediaController::submitQuizResult()
+MediaController::processQuizResult()
     ↓
-If answer correct:
-    AllocateReward::dispatch()
+If answer correct: user unlocks campaign offer (delivered by email); no monetary reward job
 ```
 
 ---
@@ -441,18 +398,11 @@ If answer correct:
    - Condition: User receives new assignment with `current = true`
    - Type: `'assigned'`
 
-### AllocateReward Triggers
+### Quiz Result (Offer Unlock)
 
-1. **Quiz Answer** (via `MediaController::submitQuizResult()`)
+1. **Quiz Answer** (via `MediaController::processQuizResult()`)
    - When: User answers quiz correctly
-   - Condition: Answer matches question answer exactly
-
-### AllocateRewardWithAmount Triggers
-
-1. **Round Completion Without Winner** (via `MediaWatchService::allocateRewardsForUnwonRound()`)
-   - When: Round completes but no one answered quiz correctly
-   - Condition: Media has reward to distribute
-   - Action: Distributes reward to random active verified users
+   - Action: User unlocks campaign offer (delivered by email); no monetary reward job
 
 ---
 
@@ -493,6 +443,6 @@ If answer correct:
 - If one job fails, others continue processing independently
 - Each job checks for required conditions before executing
 - Notifications are only sent to users with `push_notifications = true` and a valid `push_token`
-- **Location Processing**: Location expansion uses batch database operations for performance. Large selections (e.g., entire continents) are processed efficiently in chunks of 500 locations, reducing database queries from hundreds to just a few bulk operations.
-- **Location Expansion**: Runs asynchronously and doesn't block media upload or user assignment. If locations aren't expanded yet when `AssignMediaToUsersJob` runs, it gracefully falls back to general user assignment without location filtering.
-- **Media Assignment**: Uses unified `AssignMediaToUsersJob` for all assignment scenarios. Handles both radius-based and location-selection-based media using progressive radius expansion and gender filtering.
+- **Location Processing**: Location expansion uses batch database operations for performance. Large selections (e.g., entire continents) are processed efficiently in chunks of 500 locations.
+- **Media Assignment**: All assignments go through `AssignMediaToUsersJob`, dispatched by `AssignUnassignedMediaJob`, `ProcessRoundCompletionJob`, `CleanupAndReassignMediaJob` (via `MediaAssignmentService`), or the Media model `updated` event when there are no location IDs.
+- **Campaigns**: Each media has an optional `Campaign` record (creator_id, media_id, active). Completion emails are sent with a reason: `completed`, `expired`, or `target_reached`.
