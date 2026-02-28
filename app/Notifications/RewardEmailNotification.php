@@ -64,9 +64,9 @@ class RewardEmailNotification extends Notification
         }
 
         $message = (new MailMessage)
-            ->subject('🎁 You unlocked an offer on ZI-VO')
+            ->subject('🎁 You have a reward from ZI-VO')
             ->greeting('Hi ' . ($notifiable->name ?: 'there') . ',')
-            ->line('Great news – you answered your quiz correctly and have unlocked an exclusive offer from one of our business partners on ZI-VO.')
+            ->line('Great news – you paid attention and have unlocked earned reward on ZI-VO.')
             ->line('**Offer Details:**')
             ->line('• **Offer:** ' . $offer);
 
@@ -82,8 +82,8 @@ class RewardEmailNotification extends Notification
             ->line($claimLine)
             ->line('When you visit, simply show this email to the business so they can validate and apply your offer.')
             ->line('This offer is personal to you and linked to your ZI-VO account. Please keep this email safe until you have redeemed it.')
-            ->line('Thank you for paying attention and discovering local businesses with ZI-VO.')
-            ->salutation('Best regards,' . PHP_EOL . 'The ZI-VO Team');
+            ->line('Thank you for paying attention!')
+            ->salutation('Best regards,' . PHP_EOL . 'ZI-VO');
 
         return $message;
     }
