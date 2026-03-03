@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('payments', function (Blueprint $table) {
+        if (! Schema::hasTable('payments')) {
+            Schema::create('payments', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('user_id')->nullable();
             $table->foreignUuid('creator_id')->nullable()->constrained('creators')->cascadeOnDelete();
@@ -31,7 +32,8 @@ return new class extends Migration
             $table->index(['media_id', 'status']);
             $table->index(['creator_id', 'status']);
             $table->index('transaction_reference');
-        });
+            });
+        }
     }
 
     public function down(): void

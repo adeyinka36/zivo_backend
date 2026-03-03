@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('locations', function (Blueprint $table) {
+        if (! Schema::hasTable('locations')) {
+            Schema::create('locations', function (Blueprint $table) {
             $table->id();
             $table->string('region_name');
             $table->decimal('latitude', 10, 8);
@@ -26,7 +27,8 @@ return new class extends Migration
             $table->index('continent');
             $table->unique(['country', 'region_name'], 'locations_country_region_unique');
             $table->index(['region_name', 'country'], 'locations_region_country_index');
-        });
+            });
+        }
     }
 
     public function down(): void

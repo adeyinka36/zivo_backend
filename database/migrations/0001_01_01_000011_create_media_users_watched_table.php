@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('media_users_watched', function (Blueprint $table) {
+        if (! Schema::hasTable('media_users_watched')) {
+            Schema::create('media_users_watched', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
             $table->foreignUuid('media_id')->constrained()->cascadeOnDelete();
@@ -16,7 +17,8 @@ return new class extends Migration
 
             $table->unique(['user_id', 'media_id'], 'unique_user_media_watch');
             $table->index(['media_id', 'user_id'], 'media_users_watched_lookup_index');
-        });
+            });
+        }
     }
 
     public function down(): void

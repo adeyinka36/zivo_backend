@@ -8,10 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('creator_media', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
-        });
+        if (! Schema::hasTable('creator_media')) {
+            Schema::create('creator_media', function (Blueprint $table) {
+                $table->id();
+                $table->timestamps();
+            });
+        }
     }
 
     public function down(): void

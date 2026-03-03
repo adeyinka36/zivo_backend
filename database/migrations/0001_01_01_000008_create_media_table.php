@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('media', function (Blueprint $table) {
+        if (! Schema::hasTable('media')) {
+            Schema::create('media', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('creator_id')->constrained('creators')->cascadeOnDelete();
             $table->string('name');
@@ -38,7 +39,8 @@ return new class extends Migration
 
             $table->index('creator_id', 'media_creator_id_index');
             $table->index(['created_at', 'size'], 'media_performance_index');
-        });
+            });
+        }
     }
 
     public function down(): void

@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('users', function (Blueprint $table) {
+        if (! Schema::hasTable('users')) {
+            Schema::create('users', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('name');
             $table->string('username')->unique();
@@ -26,7 +27,8 @@ return new class extends Migration
 
             $table->index('location_id');
             $table->index(['latitude', 'longitude']);
-        });
+            });
+        }
     }
 
     public function down(): void
