@@ -18,7 +18,6 @@ return new class extends Migration
 
             $table->foreign('media_id')->references('id')->on('media')->onDelete('cascade');
             $table->foreign('user_id')->references('id')->on('users')->onDelete('set null');
-
             $table->index(['media_id', 'user_id']);
         });
     }
@@ -28,4 +27,3 @@ return new class extends Migration
         Schema::dropIfExists('campaign_codes');
     }
 };
-

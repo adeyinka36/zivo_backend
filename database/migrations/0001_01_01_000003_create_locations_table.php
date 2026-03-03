@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('locations', function (Blueprint $table) {
@@ -17,6 +14,7 @@ return new class extends Migration
             $table->decimal('latitude', 10, 8);
             $table->decimal('longitude', 11, 8);
             $table->string('country');
+            $table->string('country_code', 2)->nullable();
             $table->string('continent');
             $table->string('timezone');
             $table->timestamps();
@@ -24,13 +22,13 @@ return new class extends Migration
             $table->index(['latitude', 'longitude']);
             $table->index('region_name');
             $table->index('country');
+            $table->index('country_code');
             $table->index('continent');
+            $table->unique(['country', 'region_name'], 'locations_country_region_unique');
+            $table->index(['region_name', 'country'], 'locations_region_country_index');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('locations');

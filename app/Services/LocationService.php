@@ -28,30 +28,43 @@ class LocationService
      * @param string|null $countryCode
      * @return Location|null
      */
-    public function createOrFindLocation(string $city, string $country, string $continent, ?string $countryCode = null): ?Location
-    {
-        $location = Location::where('region_name', $city)
-            ->where('country', $country)
-            ->first();
+    public function createOrFindLocation(
+        string $city,
+        string $country,
+        string $continent,
+        ?string $countryCode = null,
+        float $latitude = 0,
+        float $longitude = 0,
+        string $timezone = 'UTC'
+    ): ?Location {
+        $location = Location::firstOrCreate(
+            [
+                'region_name' => $city,
+                'country' => $country,
+            ],
+            [
+                'continent' => $continent,
+                'country_code' => $countryCode,
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'timezone' => $timezone,
+            ]
+        );
 
-        if ($location) {
+        if (!$location->wasRecentlyCreated) {
+            $updates = [];
             if (!$location->country_code && $countryCode) {
-                $location->update(['country_code' => $countryCode]);
+                $updates['country_code'] = $countryCode;
             }
             if ($location->continent !== $continent) {
-                $location->update(['continent' => $continent]);
+                $updates['continent'] = $continent;
             }
-            return $location;
+            if (!empty($updates)) {
+                $location->update($updates);
+            }
         }
 
-        // Location not found - must be added manually to database
-        Log::warning('Location not found in database', [
-            'city' => $city,
-            'country' => $country,
-            'continent' => $continent,
-        ]);
-
-        return null;
+        return $location;
     }
 
     /**
@@ -241,7 +254,7 @@ class LocationService
                         $locationIds[] = $existing->id;
 
                         $updates = [];
-                        if (!$existing->country_code && $data['country_code']) {
+                        if (!$existing->country_code && ($data['country_code'] ?? null)) {
                             $updates['country_code'] = $data['country_code'];
                         }
                         if ($existing->continent !== $data['continent']) {
@@ -252,12 +265,16 @@ class LocationService
                             $toUpdate[$existing->id] = $updates;
                         }
                     } else {
-                        // Location not found - must be added manually to database
-                        Log::warning('Location not found in database', [
+                        $location = Location::create([
                             'region_name' => $data['region_name'],
                             'country' => $data['country'],
                             'continent' => $data['continent'],
+                            'country_code' => $data['country_code'] ?? null,
+                            'latitude' => 0,
+                            'longitude' => 0,
+                            'timezone' => 'UTC',
                         ]);
+                        $locationIds[] = $location->id;
                     }
                 }
 

@@ -54,7 +54,12 @@ class UploadFileToS3Job implements ShouldQueue
             $localFilePath = Storage::disk('local')->path($this->tempFilePath);
 
             if ($disk === 's3') {
-                $this->uploadToS3WithStream($localFilePath, $storagePath, $this->metadata['mime_type']);
+                $s3Key = $storagePath;
+                $root = config('filesystems.disks.s3.root', '');
+                if ($root) {
+                    $s3Key = $root . ltrim($storagePath, '/');
+                }
+                $this->uploadToS3WithStream($localFilePath, $s3Key, $this->metadata['mime_type']);
             } else {
                 $fileContent = Storage::disk('local')->get($this->tempFilePath);
                 if ($fileContent === false) {

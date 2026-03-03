@@ -6,14 +6,12 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('payments', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
+            $table->uuid('user_id')->nullable();
+            $table->foreignUuid('creator_id')->nullable()->constrained('creators')->cascadeOnDelete();
             $table->foreignUuid('media_id')->constrained()->cascadeOnDelete();
             $table->string('transaction_reference')->unique();
             $table->string('stripe_payment_intent_id')->nullable();
@@ -28,16 +26,14 @@ return new class extends Migration
             $table->timestamp('paid_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
-            
+
             $table->index(['user_id', 'status']);
             $table->index(['media_id', 'status']);
+            $table->index(['creator_id', 'status']);
             $table->index('transaction_reference');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('payments');

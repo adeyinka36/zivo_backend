@@ -8,19 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('tags', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->string('name');
-            $table->string('slug')->unique();
+        Schema::create('creator_media', function (Blueprint $table) {
+            $table->id();
             $table->timestamps();
-
-            $table->index('name');
-            $table->index('slug');
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('tags');
+        Schema::dropIfExists('creator_media');
     }
 };

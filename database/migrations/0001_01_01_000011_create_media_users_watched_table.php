@@ -6,31 +6,21 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-        Schema::create('user_assignments', function (Blueprint $table) {
+        Schema::create('media_users_watched', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('user_id')->constrained()->cascadeOnDelete();
             $table->foreignUuid('media_id')->constrained()->cascadeOnDelete();
-            $table->boolean('watched')->default(false);
-            $table->boolean('current')->default(false);
             $table->timestamps();
 
-            $table->unique(['user_id', 'media_id']);
-            $table->index('user_id');
-            $table->index('media_id');
-            $table->index('watched');
+            $table->unique(['user_id', 'media_id'], 'unique_user_media_watch');
+            $table->index(['media_id', 'user_id'], 'media_users_watched_lookup_index');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('user_assignments');
+        Schema::dropIfExists('media_users_watched');
     }
 };

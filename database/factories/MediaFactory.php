@@ -2,25 +2,19 @@
 
 namespace Database\Factories;
 
+use App\Models\Creator;
 use App\Models\Media;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Media>
  */
 class MediaFactory extends Factory
 {
-    /**
-     * The name of the factory's corresponding model.
-     *
-     * @var string
-     */
     protected $model = Media::class;
 
     /**
-     * Sample video URLs for seeding
+     * Sample video URLs for seeding (reliable public sample videos)
      */
     protected array $sampleVideos = [
         'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
@@ -46,37 +40,24 @@ class MediaFactory extends Factory
         'https://picsum.photos/1280/720'
     ];
 
-    /**
-     * Sample document URLs for seeding
-     */
-
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
         $mediaType = $this->faker->randomElement(['video', 'image']);
 
-        switch ($mediaType) {
-            case 'video':
-                $url = $this->faker->randomElement($this->sampleVideos);
-                $mimeType = 'video/mp4';
-                $size = $this->faker->numberBetween(1000000, 10000000); // 1MB to 10MB
-                break;
-
-            case 'image':
-                $url = $this->faker->randomElement($this->sampleImages);
-                $mimeType = 'image/jpeg';
-                $size = $this->faker->numberBetween(100000, 5000000); // 100KB to 5MB
-                break;
+        if ($mediaType === 'video') {
+            $url = $this->faker->randomElement($this->sampleVideos);
+            $mimeType = 'video/mp4';
+            $size = $this->faker->numberBetween(1000000, 10000000);
+        } else {
+            $url = $this->faker->randomElement($this->sampleImages);
+            $mimeType = 'image/jpeg';
+            $size = $this->faker->numberBetween(100000, 5000000);
         }
 
-        $fileName = basename($url);
+        $fileName = basename(parse_url($url, PHP_URL_PATH) ?: $url);
 
         return [
-            'user_id' => User::factory(),
+            'creator_id' => Creator::factory(),
             'name' => $fileName,
             'file_name' => $fileName,
             'mime_type' => $mimeType,
@@ -84,8 +65,21 @@ class MediaFactory extends Factory
             'path' => $url,
             'disk' => 'url',
             'description' => $this->faker->sentence(),
-            'reward' => $this->faker->numberBetween(100, 100000),
-            'rounds' => $this->faker->numberBetween(1, 5),
+            'payment_status' => 'paid',
+            'active' => true,
         ];
+    }
+
+    /**
+     * Media in pending/processing state.
+     */
+    public function pending(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'path' => 'pending',
+            'disk' => 'pending',
+            'payment_status' => 'pending',
+            'active' => false,
+        ]);
     }
 }
