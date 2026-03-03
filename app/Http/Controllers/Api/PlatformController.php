@@ -40,7 +40,7 @@ class PlatformController extends Controller
             return [
                 'video_url' => $aboutVideoUrl,
                 'creator_video_url' => $creatorVideoUrl,
-                'description' => config('platform.about_description', 'Welcome to Zivo! Pay Attention.'),
+                'description' => config('platform.about_description', 'Pay Attention.'),
                 'creator_description' => config('platform.about_creator_description', 'Learn how to create and share your content on Zivo. Upload videos, set rewards, and get attention.'),
                 'media' => [
                     'target_views' => (int) ($mediaConfig['target_views'] ?? 10),
