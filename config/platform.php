@@ -1,6 +1,9 @@
 <?php
 
 return [
+    // Optional full URLs (e.g. from CDN). When set, used instead of path/disk.
+    'about_video_url' => env('PLATFORM_ABOUT_VIDEO_URL'),
+    'about_creator_video_url' => env('PLATFORM_ABOUT_CREATOR_VIDEO_URL'),
     'about_video_path' => env('PLATFORM_ABOUT_VIDEO_PATH', 'platform/about-video.mp4'),
     'about_video_disk' => env('PLATFORM_ABOUT_VIDEO_DISK', 'public'),
     'about_description' => env('PLATFORM_ABOUT_DESCRIPTION', 'Welcome to Zivo! A platform where content creators can share their media and viewers can discover new content. Watch videos, answer quizzes, and earn rewards.'),

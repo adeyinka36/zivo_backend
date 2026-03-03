@@ -21,13 +21,18 @@ class PlatformController extends Controller
         $cacheDuration = 3600; // 1 hour
 
         $data = Cache::remember($cacheKey, $cacheDuration, function () {
-            $aboutVideoPath = config('platform.about_video_path', 'platform/about-video.mp4');
-            $aboutVideoDisk = config('platform.about_video_disk', 'public');
-            $creatorVideoPath = config('platform.about_creator_video_path', 'platform/about-creator-video.mp4');
-            $creatorVideoDisk = config('platform.about_creator_video_disk', 'public');
-            
-            $aboutVideoUrl = $this->getVideoUrl($aboutVideoPath, $aboutVideoDisk, 'about');
-            $creatorVideoUrl = $this->getVideoUrl($creatorVideoPath, $creatorVideoDisk, 'creator');
+            $aboutVideoUrl = $this->resolveVideoUrl(
+                'platform.about_video_url',
+                config('platform.about_video_path', 'platform/about-video.mp4'),
+                config('platform.about_video_disk', 'public'),
+                'about'
+            );
+            $creatorVideoUrl = $this->resolveVideoUrl(
+                'platform.about_creator_video_url',
+                config('platform.about_creator_video_path', 'platform/about-creator-video.mp4'),
+                config('platform.about_creator_video_disk', 'public'),
+                'creator'
+            );
 
             $mediaConfig = config('services.media', []);
             $stripeConfig = config('stripe', []);
@@ -80,6 +85,24 @@ class PlatformController extends Controller
         return response()->json([
             'target_views' => $targetViews,
         ]);
+    }
+
+    /**
+     * Resolve video URL: use env URL if set and non-empty, otherwise build from storage path/disk.
+     *
+     * @param string $urlConfigKey Config key for optional full URL (e.g. platform.about_video_url)
+     * @param string $path
+     * @param string $disk
+     * @param string $type
+     * @return string|null
+     */
+    private function resolveVideoUrl(string $urlConfigKey, string $path, string $disk, string $type): ?string
+    {
+        $url = config($urlConfigKey);
+        if ($url !== null && $url !== '') {
+            return $url;
+        }
+        return $this->getVideoUrl($path, $disk, $type);
     }
 
     /**
