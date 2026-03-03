@@ -741,7 +741,8 @@ failed
 - `STRIPE_SECRET_KEY`: Stripe secret key
 - `STRIPE_WEBHOOK_SECRET`: Webhook signing secret
 - `STRIPE_CURRENCY`: Currency code (default: 'usd')
-- `MEDIA_COST_PER_ROUND`: Optional; cost per round in major currency (e.g. 0.25 for $0.25). If not set, backend may use a fixed cents-per-round (e.g. 500 cents).
+- `STRIPE_MINIMUM_AMOUNT`: Optional; minimum charge in smallest currency unit (e.g. 50 for 50 cents USD). Default 50. Stripe requires e.g. 50¢ USD minimum.
+- `MEDIA_COST_PER_ROUND`: Cost per round in major currency (e.g. 0.25 for $0.25, 0.01 for $0.01). Used for the actual charge; if total is below `STRIPE_MINIMUM_AMOUNT`, the charge is raised to the minimum.
 
 **Frontend**:
 - Publishable key can be read from `/platform-info` (`payments.stripe_publishable_key`) or from env (e.g. `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`)

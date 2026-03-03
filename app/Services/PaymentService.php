@@ -21,14 +21,21 @@ class PaymentService
 
     /**
      * Calculate expected payment amount from media record (server-side).
+     * Uses config services.media.cost_per_round (in major currency, e.g. dollars) and enforces Stripe minimum.
      *
      * @param Media $media
      * @return array{reward_amount_cents: int, platform_fee_cents: int, total_amount_cents: int}
      */
     public function calculateExpectedPaymentAmount(Media $media): array
     {
-        // Fixed cost: $5 per round (500 cents per round)
-        $totalAmountCents = 500 * (int) $media->rounds;
+        $costPerRound = (float) config('services.media.cost_per_round', 0.25);
+        $rounds = (int) $media->rounds;
+        $totalAmountCents = (int) round($costPerRound * 100 * $rounds);
+
+        $minimumCents = (int) config('stripe.minimum_amount', 50);
+        if ($totalAmountCents < $minimumCents) {
+            $totalAmountCents = $minimumCents;
+        }
 
         return [
             'reward_amount_cents' => $totalAmountCents,
