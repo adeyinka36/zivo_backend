@@ -13,6 +13,7 @@ return [
 
     // General platform metadata exposed (safely) via /platform-info
     'platform_name' => env('PLATFORM_NAME', 'Zivo'),
-    'support_email' => env('PLATFORM_SUPPORT_EMAIL', 'support@example.com'),
+    // CONTACT_EMAIL is shown on login/register; falls back to PLATFORM_SUPPORT_EMAIL
+    'support_email' => env('CONTACT_EMAIL', env('PLATFORM_SUPPORT_EMAIL', 'support@example.com')),
     'support_url' => env('PLATFORM_SUPPORT_URL', 'https://zivo.app/support'),
 ];

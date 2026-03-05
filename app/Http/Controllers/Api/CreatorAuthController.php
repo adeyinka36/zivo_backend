@@ -199,6 +199,7 @@ class CreatorAuthController extends Controller
                     'phone' => $creator->phone,
                     'address' => $creator->address,
                     'crn' => $creator->crn,
+                    'is_admin' => $creator->is_admin,
                 ]
             );
         } catch (\Exception $e) {

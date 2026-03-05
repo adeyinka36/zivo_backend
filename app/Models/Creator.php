@@ -31,6 +31,7 @@ class Creator extends Authenticatable implements MustVerifyEmail
         'is_limited_company',
         'proof_of_address_type',
         'proof_of_address_path',
+        'is_admin',
     ];
 
     /**
@@ -55,6 +56,7 @@ class Creator extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_limited_company' => 'boolean',
+            'is_admin' => 'boolean',
         ];
     }
 }

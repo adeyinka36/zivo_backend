@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompaniesHouseController;
 use App\Http\Controllers\Api\CreatorAuthController;
 use App\Http\Controllers\Api\CreatorCampaignController;
+use App\Http\Controllers\Api\CreatorImpersonationController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\MediaController;
 use App\Http\Controllers\Api\PaymentController;
@@ -93,6 +94,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/creators/logout', [CreatorAuthController::class, 'logout'])->middleware('ensure.creator');
         Route::get('/creators/me', [CreatorAuthController::class, 'me'])->middleware('ensure.creator');
         Route::post('/creators/update-verification', [CreatorAuthController::class, 'updateVerification'])->middleware('ensure.creator');
+
+        Route::get('/creators', [CreatorImpersonationController::class, 'index'])->middleware(['ensure.creator', 'ensure.admin']);
+        Route::post('/creators/impersonate', [CreatorImpersonationController::class, 'impersonate'])->middleware(['ensure.creator', 'ensure.admin']);
     });
 
     Route::post('webhooks/stripe', [PaymentController::class, 'webhook']);
