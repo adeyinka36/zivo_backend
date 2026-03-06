@@ -18,7 +18,7 @@ Schedule::command('media:track-failed-uploads')->weekly();
 
 Schedule::job(new CleanupAndReassignMediaJob)->cron('0 */6 * * *');
 
-Schedule::job(new DeleteCompletedCampaignsJob)->daily();
+Schedule::job(new DeleteCompletedCampaignsJob)->everyTwelveHours();
 
 Schedule::job(new AssignCurrentMediaJob)->cron('0 */2 * * *');
 
