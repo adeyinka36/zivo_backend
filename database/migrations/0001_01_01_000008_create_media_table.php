@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('media_type')->nullable();
             $table->unsignedBigInteger('size');
             $table->string('path');
+            $table->integer('rounds')->default(1);
             $table->string('temp_file_path')->nullable();
             $table->string('disk');
             $table->string('thumbnail')->nullable();

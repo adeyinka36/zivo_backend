@@ -136,57 +136,13 @@ class MediaService
     }
 
     /**
-     * Create or update a draft media record with metadata only.
-     * 
-     * Reuses existing unpaid draft media for the same file to prevent duplicates.
-     * Matches drafts based on file name, size, and mime type to ensure correct video is reused.
+     * Create a new draft media record with metadata.
+     *
+     * Always creates a new media record so the same file can be uploaded multiple times
+     * (e.g. for different campaigns). No draft reuse - each "Pay & Upload" is a fresh flow.
      */
     public function createDraftMedia(array $data, Creator $creator, ?UploadedFile $file = null): Media
     {
-        $targetViews = (int) config('services.media.target_views', 10);
-
-        $query = Media::where('creator_id', $creator->id)
-            ->where('payment_status', 'pending')
-            ->where('path', 'pending')
-            ->where('disk', 'pending')
-            ->whereNull('paid_at');
-
-        if ($file) {
-            $query->where('file_name', $file->getClientOriginalName())
-                ->where('size', $file->getSize())
-                ->where('mime_type', $file->getMimeType());
-        }
-
-        $existingDraft = $query->orderBy('created_at', 'desc')->first();
-
-        if ($existingDraft) {
-            $existingDraft->update([
-                'offer' => $data['offer'] ?? null,
-                'rounds' => $data['rounds'],
-                'from_date' => isset($data['from_date']) ? $data['from_date'] : null,
-                'to_date' => isset($data['to_date']) ? $data['to_date'] : null,
-            ]);
-
-            $existingDraft->locations()->detach();
-            if (!empty($data['location_id'])) {
-                $existingDraft->locations()->attach($data['location_id']);
-            }
-
-            if ($existingDraft->temp_file_path && Storage::disk('local')->exists($existingDraft->temp_file_path)) {
-                Storage::disk('local')->delete($existingDraft->temp_file_path);
-            }
-
-            $existingDraft->update(['temp_file_path' => null]);
-
-            Log::info('Reusing existing draft media record for same file', [
-                'media_id' => $existingDraft->id,
-                'creator_id' => $creator->id,
-                'file_name' => $file ? $file->getClientOriginalName() : 'no file',
-            ]);
-
-            return $existingDraft;
-        }
-
         $media = Media::create([
             'creator_id' => $creator->id,
             'name' => 'Pending Upload',
