@@ -31,7 +31,7 @@ class MediaListResource extends JsonResource
             'media_type' => $this->media_type,
             'rounds' => $this->rounds,
             'url' => $this->getFileUrl(),
-            'description' => $this->description,
+            'offer' => $this->offer,
             'created_at' => $this->created_at,
             'has_watched' => $hasWatched,
             'thumbnail' => $this->getThumbnailUrl(),

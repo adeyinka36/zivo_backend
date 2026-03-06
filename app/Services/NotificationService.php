@@ -70,7 +70,7 @@ class NotificationService
                 'data' => [
                     'type' => 'new_media_upload',
                     'mediaId' => $media->id,
-                    'mediaName' => Str::limit($media->description, 15, '...'),
+                    'mediaName' => Str::limit($media->offer ?? $media->name, 15, '...'),
                     'uploaderName' => $uploader->name,
                     'screen' => 'explore'
                 ],
@@ -103,7 +103,7 @@ class NotificationService
             'data' => [
                 'type' => 'media_upload_success',
                 'mediaId' => $media->id,
-                'mediaName' => Str::limit($media->description ?? $media->name, 15, '...'),
+                'mediaName' => Str::limit($media->offer ?? $media->name, 15, '...'),
                 'screen' => 'explore'
             ],
             'sound' => 'default',
@@ -232,7 +232,7 @@ class NotificationService
         $targetViews = (int) config('services.media.target_views', 25);
         $totalViews = $media->rounds * $targetViews;
         $mediaName = $media->name ?: 'Your media';
-        $mediaDescription = $media->description ?: 'No description';
+        $mediaDescription = $media->offer ?: $media->name ?: 'Media';
 
         $body = sprintf(
             'Your campaign "%s" completed successfully! Total views: %s',

@@ -21,7 +21,7 @@ class UserMediaResource extends JsonResource
             'mime_type' => $this->mime_type ?? '',
             'media_type' => $this->media_type ?? $this->getMediaType(),
             'url' => $this->getFileUrl() ?? '',
-            'description' => $this->offer ?? '',
+            'offer' => $this->offer ?? '',
             'created_at' => $this->created_at?->toIso8601String() ?? now()->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String() ?? now()->toIso8601String(),
             'has_watched' => $this->getHasWatchedAttribute(),
