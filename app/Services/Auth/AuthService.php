@@ -31,7 +31,6 @@ readonly class AuthService
                 'password' => $dto->password,
             ]);
 
-            $user->load('location');
             $user->sendEmailVerificationNotification();
             $token = $this->authRepository->createToken($user);
 
@@ -57,7 +56,6 @@ readonly class AuthService
             throw new InvalidCredentialsException('Invalid credentials');
         }
 
-        $user->load('location');
         $token = $this->authRepository->createToken($user);
 
         return new AuthResponseDTO(

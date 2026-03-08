@@ -37,8 +37,7 @@ class GenerateUserCoordinates extends Command
             $this->newLine();
         }
 
-        $query = User::query()
-            ->with('location');
+        $query = User::query();
 
         if (!$updateAll) {
             $query->where(function ($q) {
@@ -87,7 +86,7 @@ class GenerateUserCoordinates extends Command
                     $bar->setMessage("✓ {$user->email}");
                 } else {
                     $skippedCount++;
-                    $bar->setMessage("⊘ {$user->email} (no location)");
+                    $bar->setMessage("⊘ {$user->email} (skipped)");
                 }
             } catch (\Exception $e) {
                 $errorCount++;
@@ -124,26 +123,18 @@ class GenerateUserCoordinates extends Command
 
     /**
      * Get coordinates for a user.
-     * 
-     * Priority:
-     * 1. Use location's coordinates if available and valid
-     * 2. Generate realistic random coordinates
+     * Returns generated coordinates when the user has none or invalid ones; null when already valid.
      *
      * @param User $user
-     * @return array|null Array with 'latitude' and 'longitude', or null if unable to generate
+     * @return array|null Array with 'latitude' and 'longitude', or null to skip (user already has valid coordinates)
      */
     private function getCoordinatesForUser(User $user): ?array
     {
-        if ($user->location && $user->location->latitude != 0 && $user->location->longitude != 0) {
-            $lat = (float) $user->location->latitude;
-            $lng = (float) $user->location->longitude;
+        $lat = $user->latitude !== null ? (float) $user->latitude : 0.0;
+        $lng = $user->longitude !== null ? (float) $user->longitude : 0.0;
 
-            if (abs($lat) <= 90 && abs($lng) <= 180) {
-                return [
-                    'latitude' => $lat,
-                    'longitude' => $lng,
-                ];
-            }
+        if ($lat != 0.0 && $lng != 0.0 && abs($lat) <= 90 && abs($lng) <= 180) {
+            return null;
         }
 
         return $this->generateRealisticCoordinates();

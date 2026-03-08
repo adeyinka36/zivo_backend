@@ -11,8 +11,6 @@ class ProfileService
 {
     public function getProfileWithMedia(User $user): array
     {
-        $user->load('location');
-        
         // Users no longer create media - return empty collection
         $media = collect([]);
 

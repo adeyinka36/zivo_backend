@@ -32,7 +32,6 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
         'dob',
         'push_token',
         'push_notifications',
-        'location_id',
         'latitude',
         'longitude',
     ];
@@ -70,11 +69,6 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
     public function sendPasswordResetNotification($token)
     {
         $this->notify(new \App\Notifications\ResetPasswordNotification($token));
-    }
-
-    public function location()
-    {
-        return $this->belongsTo(Location::class);
     }
 
     public function assignments(): HasMany

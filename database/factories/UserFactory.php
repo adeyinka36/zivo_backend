@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Models\Location;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -24,8 +23,7 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
-        $location = Location::inRandomOrder()->first();
-        $coordinates = $this->getCoordinatesForLocation($location);
+        $coordinates = $this->generateRealisticCoordinates();
 
         return [
             'name' => $this->faker->name(),
@@ -36,36 +34,9 @@ class UserFactory extends Factory
             'password' => static::$password ??= bcrypt('Secret19'),
             'remember_token' => Str::random(10),
             'push_notifications' => true,
-            'location_id' => $location?->id ?? null,
             'latitude' => $coordinates['latitude'],
             'longitude' => $coordinates['longitude'],
         ];
-    }
-
-    /**
-     * Get coordinates for a location.
-     * 
-     * Uses location's coordinates if available and valid,
-     * otherwise generates realistic random coordinates.
-     *
-     * @param Location|null $location
-     * @return array Array with 'latitude' and 'longitude'
-     */
-    private function getCoordinatesForLocation(?Location $location): array
-    {
-        if ($location && $location->latitude != 0 && $location->longitude != 0) {
-            $lat = (float) $location->latitude;
-            $lng = (float) $location->longitude;
-
-            if (abs($lat) <= 90 && abs($lng) <= 180) {
-                return [
-                    'latitude' => $lat,
-                    'longitude' => $lng,
-                ];
-            }
-        }
-
-        return $this->generateRealisticCoordinates();
     }
 
     /**

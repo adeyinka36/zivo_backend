@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Jobs\AssignMediaToUsersJob;
 use App\Models\Media;
+use App\Models\User;
+use App\Models\UserAssignment;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -73,7 +76,7 @@ class MediaAssignmentService
         $coordinates = $this->extractCoordinates($media->locations);
         
         if (empty($coordinates)) {
-            return $this->selectUsersByLocationHierarchy($media, $neededCount, $excludeUserIds, $scoringService);
+            return $this->getUsers($media, $neededCount, $excludeUserIds, $scoringService);
         }
 
         $radii = [5, 10, 20, 50, 100, 250, 500, 1000];
@@ -198,75 +201,6 @@ class MediaAssignmentService
     }
 
     /**
-     * Fallback method: Select users by location hierarchy (city, country, continent).
-     *
-     * @param Media $media
-     * @param int $neededCount
-     * @param array $excludeUserIds
-     * @return array
-     */
-    private function selectUsersByLocationHierarchy(Media $media, int $neededCount, array $excludeUserIds): array
-    {
-        $selectedUsers = [];
-
-        $cityLocationIds = $media->locations->pluck('id')->toArray();
-        $countryLocationIds = $this->getCountryLocationIds($media->locations);
-        $continentLocationIds = $this->getContinentLocationIds($media->locations);
-
-        $cityUsers = $this->getUsersByLocationIds($media, $cityLocationIds, $neededCount, $excludeUserIds, $scoringService);
-        $selectedUsers = array_merge($selectedUsers, $cityUsers);
-        $excludeUserIds = array_unique(array_merge($excludeUserIds, array_column($cityUsers, 'id')));
-
-        if (count($selectedUsers) < $neededCount) {
-            $remaining = $neededCount - count($selectedUsers);
-            $countryUsers = $this->getUsersByLocationIds($media, $countryLocationIds, $remaining, $excludeUserIds, $scoringService);
-            $selectedUsers = array_merge($selectedUsers, $countryUsers);
-            $excludeUserIds = array_unique(array_merge($excludeUserIds, array_column($countryUsers, 'id')));
-        }
-
-        if (count($selectedUsers) < $neededCount) {
-            $remaining = $neededCount - count($selectedUsers);
-            $continentUsers = $this->getUsersByLocationIds($media, $continentLocationIds, $remaining, $excludeUserIds, $scoringService);
-            $selectedUsers = array_merge($selectedUsers, $continentUsers);
-            $excludeUserIds = array_unique(array_merge($excludeUserIds, array_column($continentUsers, 'id')));
-        }
-
-        if (count($selectedUsers) < $neededCount) {
-            $remaining = $neededCount - count($selectedUsers);
-            $generalUsers = $this->getUsers($media, $remaining, $excludeUserIds, $scoringService);
-            $selectedUsers = array_merge($selectedUsers, $generalUsers);
-        }
-
-        return array_slice($selectedUsers, 0, $neededCount);
-    }
-
-    /**
-     * Get users by location IDs using scoring system.
-     *
-     * @param Media $media Media instance for filtering
-     * @param array $locationIds
-     * @param int $limit
-     * @param array $excludeUserIds
-     * @param UserScoringService $scoringService
-     * @return array
-     */
-    private function getUsersByLocationIds(Media $media, array $locationIds, int $limit, array $excludeUserIds, UserScoringService $scoringService): array
-    {
-        if (empty($locationIds)) {
-            return [];
-        }
-
-        $query = User::whereNotNull('email_verified_at')
-            ->whereIn('location_id', $locationIds)
-            ->whereNotIn('id', $excludeUserIds);
-
-        $scoringService->addScoringToQuery($query, $media, null, null, null);
-        $scoringService->orderByScore($query);
-
-        return $query->limit($limit)->get()->toArray();
-    }
-
-    /**
      * Get verified users without location restriction using scoring system.
      *
      * @param Media $media
@@ -284,38 +218,6 @@ class MediaAssignmentService
         $scoringService->orderByScore($query);
 
         return $query->limit($limit)->get()->toArray();
-    }
-
-    /**
-     * Get location IDs for countries of the media's locations.
-     *
-     * @param \Illuminate\Database\Eloquent\Collection $locations
-     * @return array
-     */
-    private function getCountryLocationIds($locations): array
-    {
-        $countriesCodes = $locations->pluck('country_code')->unique()->toArray();
-
-        return DB::table('locations')
-            ->whereIn('country_code', $countriesCodes)
-            ->pluck('id')
-            ->toArray();
-    }
-
-    /**
-     * Get location IDs for continents of the media's locations.
-     *
-     * @param \Illuminate\Database\Eloquent\Collection $locations
-     * @return array
-     */
-    private function getContinentLocationIds($locations): array
-    {
-        $continents = $locations->pluck('continent')->unique()->toArray();
-
-        return DB::table('locations')
-            ->whereIn('continent', $continents)
-            ->pluck('id')
-            ->toArray();
     }
 
     /**

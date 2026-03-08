@@ -53,7 +53,6 @@ Route::prefix('v1')->group(function () {
             if (!$user instanceof \App\Models\User) {
                 return response()->json(['error' => 'Unauthorized. User authentication required.'], 401);
             }
-            $user->load('location');
             return new \App\Http\Resources\UserResource($user);
         })->middleware('ensure.user');
         Route::post('/logout', [AuthController::class, 'logout'])->middleware('ensure.user');

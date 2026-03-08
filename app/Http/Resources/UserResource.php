@@ -22,7 +22,8 @@ class UserResource extends JsonResource
             'zivos' => $this->zivos ?? 0,
             'email_verified_at' => $this->email_verified_at?->toISOString(),
             'push_notifications' => $this->push_notifications,
-            'region_name' => $this->whenLoaded('location', fn() => $this->location->region_name),
+            'latitude' => $this->latitude !== null ? (float) $this->latitude : null,
+            'longitude' => $this->longitude !== null ? (float) $this->longitude : null,
             'created_at' => $this->created_at?->toISOString() ?? $this->created_at,
             'updated_at' => $this->updated_at?->toISOString() ?? $this->updated_at,
         ];

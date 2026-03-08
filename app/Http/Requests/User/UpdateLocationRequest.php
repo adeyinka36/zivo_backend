@@ -4,6 +4,10 @@ namespace App\Http\Requests\User;
 
 use Illuminate\Foundation\Http\FormRequest;
 
+/**
+ * Request for updating the authenticated user's coordinates.
+ * Only latitude and longitude are persisted; other fields may be sent by clients for compatibility.
+ */
 class UpdateLocationRequest extends FormRequest
 {
     public function authorize(): bool
@@ -11,16 +15,14 @@ class UpdateLocationRequest extends FormRequest
         return true;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function rules(): array
     {
         return [
-            'region_name' => 'required|string|max:255',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-            'country' => 'required|string|max:255',
-            'country_code' => 'required|string|size:2',
-            'continent' => 'required|string|max:255',
-            'timezone' => 'required|string|max:255',
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
         ];
     }
 }
