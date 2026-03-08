@@ -27,3 +27,5 @@ Schedule::job(new CheckRoundCompletionJob)->cron('0 */3 * * *');
 Schedule::job(new AssignUnassignedMediaJob)->everyThirtyMinutes();
 
 Schedule::job(new CleanupTempUploadsJob)->hourly();
+
+Schedule::command('media:cleanup-unpaid')->everyFifteenMinutes();

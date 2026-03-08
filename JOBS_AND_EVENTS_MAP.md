@@ -15,6 +15,16 @@ This document maps out all jobs, events, and their triggers in the Zivo backend 
 
 These jobs run automatically on a schedule defined in `routes/console.php`.
 
+| Job | Schedule |
+|-----|----------|
+| media:track-failed-uploads | Weekly |
+| CleanupAndReassignMediaJob | Every 6 hours (`0 */6 * * *`) |
+| DeleteCompletedCampaignsJob | Every 12 hours (`0 */12 * * *`) |
+| AssignCurrentMediaJob | Every 2 hours (`0 */2 * * *`) |
+| CheckRoundCompletionJob | Every 3 hours (`0 */3 * * *`) |
+| AssignUnassignedMediaJob | Every 30 minutes |
+| CleanupTempUploadsJob | Hourly |
+
 ### 1. CheckRoundCompletionJob
 - **Schedule**: Every 3 hours (`0 */3 * * *`)
 - **Purpose**: Finds media with completed rounds and processes them
@@ -43,7 +53,7 @@ These jobs run automatically on a schedule defined in `routes/console.php`.
   - Calls `MediaAssignmentService::assignMediaToUsers()` which dispatches `AssignMediaToUsersJob` to reassign
 
 ### 4. DeleteCompletedCampaignsJob
-- **Schedule**: Daily
+- **Schedule**: Every 12 hours (`0 */12 * * *`)
 - **Purpose**: Deletes completed or expired campaigns from database and storage after sending a completion email
 - **Actions**:
   - Finds all media where any of:
@@ -123,16 +133,8 @@ These jobs are dispatched programmatically in response to user actions or other 
   - Attaches location_id to media when applicable (no radius-based logic)
   - **Note**: Dependent jobs are dispatched automatically via Media model's `updated` event after the database transaction commits
 
-#### 4. GenerateThumbnailJob
-- **Triggered**: Dispatched by Media model's `updated` event (if media is a video)
-- **Dispatch**: Dispatched from Media model event listener
-- **Purpose**: Generates thumbnail for video media
-- **Condition**: Only dispatched if `mime_type` starts with `video/`
-- **Prerequisites**: Media is already processed (path, disk, mime_type are set and saved to database)
-- **Note**: Runs independently - if it fails, other jobs continue
-
-#### 5. AssignMediaToUsersJob
-- **Triggered**: Dispatched by Media model's `updated` event (if no location IDs), by `ProcessMediaUploadJob` (if location IDs exist), by `ExpandLocationSelectionsJob` (after location expansion), by `ProcessRoundCompletionJob` (after resetting assignments for new round), by `AssignUnassignedMediaJob` (scheduled), or by `CleanupAndReassignMediaJob` (via `MediaAssignmentService`)
+#### 4. AssignMediaToUsersJob
+- **Triggered**: Dispatched by Media model's `updated` event (if no location IDs), by `ProcessMediaUploadJob` (if location IDs exist), by `ExpandLocationSelectionsJob` (after location expansion), by `ProcessRoundCompletionJob` (after resetting assignments for new round), by `AssignUnassignedMediaJob` (scheduled), or by `CleanupAndReassignMediaJob` (via `MediaAssignmentService::assignMediaToUsers()`)
 - **Dispatch**: Dispatched from Media model event listener or directly from other jobs
 - **Purpose**: Assigns media to users to reach target view count (from `config('services.media.target_views')`)
 - **Prerequisites**: Media is already active and payment_status is 'paid'
@@ -142,20 +144,13 @@ These jobs are dispatched programmatically in response to user actions or other 
   - Marks assignments as `current = true` if user has no current assignment
 - **Note**: Single job used for all assignment scenarios; runs independently
 
-#### 6. SendPushNotificationJob
-- **Triggered**: Dispatched by Media model's `updated` event
-- **Dispatch**: Dispatched from Media model event listener
-- **Purpose**: Sends push notifications about new media upload
-- **Actions**: Sends upload success notification to creator; sends notification to subscribed users about new media
-- **Note**: Runs independently - if it fails, other jobs continue
-
-#### 7. SendEmailNotificationJob
+#### 5. SendEmailNotificationJob
 - **Triggered**: Dispatched by Media model's `updated` event when creator_id exists
 - **Purpose**: Sends email to creator when media upload has been processed successfully
 
 ### Round Completion Flow
 
-#### 8. ProcessRoundCompletionJob
+#### 6. ProcessRoundCompletionJob
 - **Triggered**: By `CheckRoundCompletionJob` (scheduled every 3 hours)
 - **Purpose**: Processes a completed round for a media item and handles campaign completion
 - **Actions**:
@@ -175,14 +170,14 @@ These jobs are dispatched programmatically in response to user actions or other 
 - **Quiz**: Every first-time watch of media that has a question triggers a quiz for the user.
 - **Correct answer**: No Tremendous or voucher reward. A correct answer unlocks the campaign's **offer**, delivered to the user by email. `AllocateReward` job exists but does not allocate monetary rewards.
 
-#### 9. QuizInvitation
+#### 7. QuizInvitation
 - **Triggered**: By `QuizManager` command (scheduled separately)
 - **Purpose**: Sends quiz invitations for eligible media
 - **Condition**: Media must have been created more than 6 hours ago and have been watched
 
 ### Notification Jobs
 
-#### 10. SendCurrentMediaNotificationJob
+#### 8. SendCurrentMediaNotificationJob
 - **Triggered**: Multiple sources (see [Event Triggers](#event-triggers))
 - **Purpose**: Sends push notification when media becomes current or is removed
 - **Types**:
@@ -223,11 +218,9 @@ These jobs are dispatched programmatically in response to user actions or other 
   - `payment_status` is `'paid'`
   - `active` is `true`
 - **Action**: Dispatches dependent jobs:
-  - `GenerateThumbnailJob` (if `mime_type` starts with `video/`)
   - `AssignMediaToUsersJob` (only if no location IDs exist on the media)
   - `SendEmailNotificationJob` (if `creator_id` exists)
-  - `SendPushNotificationJob` (if creator exists)
-- **Note**: Dependent jobs run after the database transaction commits and the media is fully processed
+- **Note**: `GenerateThumbnailJob` exists but is not currently dispatched (commented out in Media model). Push notifications for creators are not sent from this event (web only). Dependent jobs run after the database transaction commits.
 
 ---
 
@@ -270,8 +263,7 @@ ProcessMediaUploadJob dispatches (if location_selections exist):
     ↓
 Media model's updated event fires (after DB commit)
     ↓
-Dispatches: GenerateThumbnailJob (if video), AssignMediaToUsersJob (only if no location IDs),
-    SendPushNotificationJob, SendEmailNotificationJob
+Dispatches: AssignMediaToUsersJob (only if no location IDs), SendEmailNotificationJob (if creator_id)
     
 ProcessMediaUploadJob attaches location_id when applicable; ExpandLocationSelectionsJob expands
     location_selections and dispatches AssignMediaToUsersJob after locations synced.
@@ -302,7 +294,7 @@ For each media:
 ### Campaign Deletion Flow
 
 ```
-DeleteCompletedCampaignsJob (daily)
+DeleteCompletedCampaignsJob (every 12 hours)
     ↓
 Finds media where: campaign_completed = true OR to_date > 24h ago OR target_reached_at > 24h ago
     ↓
@@ -409,13 +401,12 @@ If answer correct: user unlocks campaign offer (delivered by email); no monetary
 ## Job Dependencies
 
 ### Independent Jobs (Run in parallel, handle own prerequisites)
-- `UploadFileToS3Job` → `ProcessMediaUploadJob` → `GenerateThumbnailJob` → `AssignMediaToUsersJob` → `SendPushNotificationJob` → `SendEmailNotificationJob`
-- `UploadFileToS3Job` → `ProcessMediaUploadJob` → `AssignMediaToUsersJob` (if location_id exists)
+- `UploadFileToS3Job` → `ProcessMediaUploadJob` → Media `updated` event → `AssignMediaToUsersJob` (if no location IDs), `SendEmailNotificationJob`
 - `UploadFileToS3Job` → `ProcessMediaUploadJob` → `ExpandLocationSelectionsJob` → `AssignMediaToUsersJob` (runs after locations expanded)
 ### Independent Jobs (Can run in parallel)
-- `CheckRoundCompletionJob`, `AssignCurrentMediaJob`, and `AssignUnassignedMediaJob` (all run every 6 hours, independent)
-- `CleanupAndReassignMediaJob` (every 6 hours) and `DeleteCompletedCampaignsJob` (daily, independent)
-- `CleanupTempUploadsJob` (runs hourly, independent)
+- `CheckRoundCompletionJob` (every 3 hours), `AssignCurrentMediaJob` (every 2 hours), and `AssignUnassignedMediaJob` (every 30 minutes) run independently at their own intervals.
+- `CleanupAndReassignMediaJob` (every 6 hours) and `DeleteCompletedCampaignsJob` (every 12 hours) run independently.
+- `CleanupTempUploadsJob` (hourly) runs independently.
 
 ### Job Dependencies
 - `ProcessMediaUploadJob` depends on `UploadFileToS3Job` (dispatched by it)

@@ -28,6 +28,7 @@ class CreatorCampaignController extends Controller
         }
 
         $media = Media::where('creator_id', $user->id)
+            ->where('payment_status', 'paid')
             ->orderByDesc('created_at')
             ->get();
 
