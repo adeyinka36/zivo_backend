@@ -57,22 +57,25 @@ class CleanupAndReassignMediaJob implements ShouldQueue
         $deletedCount = 0;
 
         foreach ($mediaToReassign as $mediaId => $assignments) {
-            $media = Media::with(['locations', 'user'])->find($mediaId);
+            $media = Media::with(['locations', 'creator'])->find($mediaId);
 
             if (!$media) {
                 continue;
             }
 
             $assignmentIds = $assignments->pluck('id')->toArray();
-            UserAssignment::whereIn('id', $assignmentIds)->delete();
-            $deletedCount += count($assignmentIds);
 
-            Log::info('Deleted stale assignments for media', [
-                'media_id' => $mediaId,
-                'deleted_count' => count($assignmentIds),
-            ]);
+            DB::transaction(function () use ($assignmentIds, $media, $assignmentService, &$deletedCount) {
+                UserAssignment::whereIn('id', $assignmentIds)->delete();
+                $deletedCount += count($assignmentIds);
 
-            $assignmentService->assignMediaToUsers($media);
+                Log::info('Deleted stale assignments for media', [
+                    'media_id' => $media->id,
+                    'deleted_count' => count($assignmentIds),
+                ]);
+
+                $assignmentService->assignMediaToUsers($media);
+            });
         }
 
         Log::info('Cleanup and reassignment completed', [

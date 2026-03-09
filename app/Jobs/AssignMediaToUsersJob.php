@@ -96,7 +96,7 @@ class AssignMediaToUsersJob implements ShouldQueue
             }
 
             $desiredCount = $targetViews;
-            $currentCount = $media->assignments()->count();
+            $currentCount = $media->assignments()->where('current', true)->count();
             $neededCount = max(0, $desiredCount - $currentCount);
 
             if ($neededCount === 0) {

@@ -27,12 +27,12 @@ class MediaAssignmentService
      */
     public function assignMediaToUsers(Media $media): int
     {
-        if (!$media->relationLoaded(['locations', 'interests'])) {
-            $media->load(['locations', 'interests']);
+        if (!$media->relationLoaded('locations')) {
+            $media->load('locations');
         }
 
         $targetCount = (int) config('services.media.target_views', 10);
-        $currentCount = $media->assignments()->count();
+        $currentCount = $media->assignments()->where('current', true)->count();
         $neededCount = max(0, $targetCount - $currentCount);
 
         if ($neededCount === 0) {
