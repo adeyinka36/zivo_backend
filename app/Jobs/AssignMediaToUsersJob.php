@@ -29,7 +29,6 @@ class AssignMediaToUsersJob implements ShouldQueue
     public int $timeout = 600;
 
     private const MAX_LOCATION_RADIUS = 500;
-    private const FALLBACK_RADIUS = 50;
     private const INITIAL_RADIUS = 1;
 
     public function __construct(
@@ -142,7 +141,12 @@ class AssignMediaToUsersJob implements ShouldQueue
     }
 
     /**
-     * Select users using progressive radius expansion.
+     * Select users using progressive radius expansion around the media's location.
+     *
+     * Strategy:
+     * 1. If no location context, select random verified users.
+     * 2. Expand radius from INITIAL_RADIUS (1 km) doubling each step up to MAX_LOCATION_RADIUS (500 km).
+     * 3. If radius expansion still hasn't found enough users, fall back to random verified users.
      *
      * @param Media $media
      * @param int $neededCount
@@ -164,18 +168,6 @@ class AssignMediaToUsersJob implements ShouldQueue
         $currentRadius = $locationContext['initial_radius'];
 
         while (count($selectedUsers) < $neededCount && $currentRadius <= self::MAX_LOCATION_RADIUS) {
-            if ($currentRadius >= self::MAX_LOCATION_RADIUS) {
-                $remaining = $neededCount - count($selectedUsers);
-                $fallbackUsers = $this->selectFallbackUsers(
-                    $locationContext['center_latitude'],
-                    $locationContext['center_longitude'],
-                    $remaining,
-                    $excludeUserIds
-                );
-                $selectedUsers = array_merge($selectedUsers, $fallbackUsers);
-                break;
-            }
-
             $remaining = $neededCount - count($selectedUsers);
             $radiusUsers = $this->selectUsersWithinRadius(
                 $media,
@@ -194,6 +186,18 @@ class AssignMediaToUsersJob implements ShouldQueue
             }
 
             $currentRadius *= 2;
+        }
+
+        if (count($selectedUsers) < $neededCount) {
+            $remaining = $neededCount - count($selectedUsers);
+            $fallbackUsers = $this->selectUsersWithoutLocation($media, $remaining, $excludeUserIds);
+            $selectedUsers = array_merge($selectedUsers, $fallbackUsers);
+
+            Log::info('Used random fallback after radius exhaustion', [
+                'media_id' => $media->id,
+                'location_matched' => count($selectedUsers) - count($fallbackUsers),
+                'random_filled' => count($fallbackUsers),
+            ]);
         }
 
         return array_slice($selectedUsers, 0, $neededCount);
@@ -291,49 +295,6 @@ class AssignMediaToUsersJob implements ShouldQueue
         return $query
             ->inRandomOrder()
             ->limit($neededCount)
-            ->get()
-            ->toArray();
-    }
-
-    /**
-     * Select fallback users within 50km of the center location.
-     * No gender filter applied - truly random selection.
-     *
-     * @param float $centerLatitude
-     * @param float $centerLongitude
-     * @param int $limit
-     * @param array $excludeUserIds
-     * @return array
-     */
-    private function selectFallbackUsers(
-        float $centerLatitude,
-        float $centerLongitude,
-        int $limit,
-        array $excludeUserIds
-    ): array {
-        if ($limit <= 0) {
-            return [];
-        }
-
-        return User::query()
-            ->whereNotNull('email_verified_at')
-            ->whereNotIn('id', $excludeUserIds)
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->where('latitude', '!=', 0)
-            ->where('longitude', '!=', 0)
-            ->whereRaw(
-                "6371 * acos(
-                    GREATEST(-1, LEAST(1,
-                        cos(radians(?)) * cos(radians(users.latitude)) *
-                        cos(radians(users.longitude) - radians(?)) +
-                        sin(radians(?)) * sin(radians(users.latitude))
-                    ))
-                ) <= ?",
-                [$centerLatitude, $centerLongitude, $centerLatitude, self::FALLBACK_RADIUS]
-            )
-            ->inRandomOrder()
-            ->limit($limit)
             ->get()
             ->toArray();
     }

@@ -7,16 +7,15 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Service for calculating user scores for media assignment prioritization.
- * 
+ *
  * Uses a tiered scoring system:
- * - Tier 1 (Highest): All criteria match (Location + Interests + Gender + Age)
+ * - Tier 1 (Highest): All criteria match (Location + Interests + Gender)
  * - Tier 2: Location + Interests
  * - Tier 3: Location only
  * - Tier 4: Interests only
- * - Tier 5: Gender + Age
- * - Tier 6: Gender OR Age
- * - Tier 7 (Lowest): No filters
- * 
+ * - Tier 5: Gender only
+ * - Tier 6 (Lowest): No filters
+ *
  * Within each tier, users are further ranked by:
  * - Interest match count (more matches = higher score)
  * - Location proximity (closer = higher score, for radius-based)
@@ -31,8 +30,7 @@ class UserScoringService
         'location_interests' => 800000,
         'location_only' => 600000,
         'interests_only' => 600000,
-        'gender_age' => 400000,
-        'gender_or_age' => 200000,
+        'gender_only' => 200000,
         'none' => 0,
     ];
 
@@ -71,12 +69,11 @@ class UserScoringService
         $mediaInterestIds = $media->interests()->pluck('interests.id')->toArray();
         $hasInterests = !empty($mediaInterestIds);
         $hasGenderFilter = $media->gender && $media->gender !== 'both';
-        $hasAgeFilter = $media->age_from !== null || $media->age_to !== null;
         $hasLocationFilter = $centerLatitude !== null && $centerLongitude !== null;
 
         $query->selectRaw('users.*');
 
-        $this->addTierScore($query, $media, $hasInterests, $hasGenderFilter, $hasAgeFilter, $hasLocationFilter);
+        $this->addTierScore($query, $media, $hasInterests, $hasGenderFilter, $hasLocationFilter);
         $this->addInterestMatchScore($query, $mediaInterestIds, $hasInterests);
         
         if ($hasLocationFilter && $maxRadius !== null) {
@@ -98,7 +95,6 @@ class UserScoringService
      * @param Media $media
      * @param bool $hasInterests
      * @param bool $hasGenderFilter
-     * @param bool $hasAgeFilter
      * @param bool $hasLocationFilter
      * @return void
      */
@@ -107,39 +103,8 @@ class UserScoringService
         Media $media,
         bool $hasInterests,
         bool $hasGenderFilter,
-        bool $hasAgeFilter,
         bool $hasLocationFilter
     ): void {
-        $conditions = [];
-
-        if ($hasLocationFilter) {
-            $conditions[] = 'users.latitude IS NOT NULL AND users.longitude IS NOT NULL AND users.latitude != 0 AND users.longitude != 0';
-        }
-
-        if ($hasInterests) {
-            $mediaInterestIds = $media->interests()->pluck('interests.id')->toArray();
-            $interestIdsStr = implode(',', array_map('intval', $mediaInterestIds));
-            $conditions[] = "EXISTS (SELECT 1 FROM user_interests WHERE user_interests.user_id = users.id AND user_interests.interest_id IN ($interestIdsStr))";
-        }
-
-        if ($hasGenderFilter) {
-            $genderValue = $media->gender;
-            $conditions[] = "users.gender = '$genderValue'";
-        }
-
-        if ($hasAgeFilter) {
-            $ageConditions = [];
-            if ($media->age_from !== null) {
-                $ageConditions[] = "DATE_PART('year', AGE(users.dob)) >= {$media->age_from}";
-            }
-            if ($media->age_to !== null) {
-                $ageConditions[] = "DATE_PART('year', AGE(users.dob)) <= {$media->age_to}";
-            }
-            if (!empty($ageConditions)) {
-                $conditions[] = '(' . implode(' AND ', $ageConditions) . ')';
-            }
-        }
-
         if ($hasLocationFilter) {
             $query->selectRaw("
                 CASE
@@ -168,28 +133,13 @@ class UserScoringService
             $query->selectRaw('true as gender_match');
         }
 
-        if ($hasAgeFilter) {
-            $ageConditions = [];
-            if ($media->age_from !== null) {
-                $ageConditions[] = "DATE_PART('year', AGE(users.dob)) >= {$media->age_from}";
-            }
-            if ($media->age_to !== null) {
-                $ageConditions[] = "DATE_PART('year', AGE(users.dob)) <= {$media->age_to}";
-            }
-            $ageCondition = !empty($ageConditions) ? '(' . implode(' AND ', $ageConditions) . ')' : 'true';
-            $query->selectRaw("$ageCondition as age_match");
-        } else {
-            $query->selectRaw('true as age_match');
-        }
-
         $query->selectRaw("
             CASE
-                WHEN location_match AND interests_match AND gender_match AND age_match THEN ?
+                WHEN location_match AND interests_match AND gender_match THEN ?
                 WHEN location_match AND interests_match THEN ?
                 WHEN location_match THEN ?
                 WHEN interests_match THEN ?
-                WHEN gender_match AND age_match THEN ?
-                WHEN gender_match OR age_match THEN ?
+                WHEN gender_match THEN ?
                 ELSE ?
             END as tier_score
         ", [
@@ -197,8 +147,7 @@ class UserScoringService
             self::TIER_SCORES['location_interests'],
             self::TIER_SCORES['location_only'],
             self::TIER_SCORES['interests_only'],
-            self::TIER_SCORES['gender_age'],
-            self::TIER_SCORES['gender_or_age'],
+            self::TIER_SCORES['gender_only'],
             self::TIER_SCORES['none'],
         ]);
     }

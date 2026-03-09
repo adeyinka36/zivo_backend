@@ -29,7 +29,6 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
         'username',
         'email',
         'password',
-        'dob',
         'push_token',
         'push_notifications',
         'latitude',
@@ -55,7 +54,6 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'push_notifications' => 'boolean',
-        'dob' => 'date',
         'latitude' => 'decimal:8',
         'longitude' => 'decimal:8',
     ];

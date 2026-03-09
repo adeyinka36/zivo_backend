@@ -1,0 +1,116 @@
+version: '3.8'
+
+# Local Development Docker Compose
+# Use this for local development with PostgreSQL and Redis
+# Usage: docker-compose -f docker-compose.local.yml up -d
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: zivo_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - app
+      - postgres
+    networks:
+      - zivo_network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: zivo_app
+    volumes:
+      - ./:/var/www/html
+    networks:
+      - zivo_network
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - PHP_MEMORY_LIMIT=2G
+      - UPLOAD_MAX_FILESIZE=10G
+      - POST_MAX_SIZE=10G
+    env_file:
+      - .env.local
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: zivo_worker
+    volumes:
+      - ./:/var/www/html
+    depends_on:
+      - app
+      - postgres
+      - redis
+    command: php artisan queue:work --tries=3 --timeout=90
+    networks:
+      - zivo_network
+    env_file:
+      - .env.local
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: zivo_postgres
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-zivo_local}
+      POSTGRES_USER: ${DB_USERNAME:-zivo_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-zivo_password}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - zivo_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-zivo_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: zivo_redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - zivo_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  zivo_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

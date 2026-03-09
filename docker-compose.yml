@@ -40,25 +40,6 @@ services:
       - UPLOAD_MAX_FILESIZE=10G
       - POST_MAX_SIZE=10G
 
-  worker:
-    build:
-      context: .
-      dockerfile: docker/php/Dockerfile
-    container_name: zivo_worker
-    volumes:
-      - ./:/var/www/html
-    depends_on:
-      - app
-    command: php artisan queue:work
-    networks:
-      - zivo_network
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 1G
-
 networks:
   zivo_network:
     driver: bridge

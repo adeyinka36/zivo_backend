@@ -22,6 +22,7 @@ class ProfileResource extends JsonResource
             'email' => $this->email,
             'email_verified_at' => $this->email_verified_at?->toISOString(),
             'push_notifications' => $this->push_notifications,
+            'has_push_token' => !empty($this->push_token),
             'latitude' => $this->latitude !== null ? (float) $this->latitude : null,
             'longitude' => $this->longitude !== null ? (float) $this->longitude : null,
             'created_at' => $this->created_at->toISOString(),

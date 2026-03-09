@@ -36,9 +36,6 @@ components:
           type: string
           format: email
           example: "john@example.com"
-        zivos:
-          type: integer
-          example: 42
         email_verified_at:
           type: string
           format: date-time
