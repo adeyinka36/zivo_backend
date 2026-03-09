@@ -52,18 +52,26 @@ class GenerateThumbnailJob implements ShouldQueue
                 return;
             }
 
-            $thumbnailPath = $thumbnailService->generateThumbnailFromPath($videoPath, $media->path);
-            
-            if ($thumbnailPath) {
-                $media->update(['thumbnail' => $thumbnailPath]);
-                Log::info('Thumbnail generated successfully', [
-                    'media_id' => $media->id,
-                    'thumbnail_path' => $thumbnailPath
-                ]);
-            } else {
-                Log::warning('Failed to generate thumbnail', [
-                    'media_id' => $media->id
-                ]);
+            $isTempFile = $media->disk === 's3';
+
+            try {
+                $thumbnailPath = $thumbnailService->generateThumbnailFromPath($videoPath, $media->path);
+
+                if ($thumbnailPath) {
+                    $media->update(['thumbnail' => $thumbnailPath]);
+                    Log::info('Thumbnail generated successfully', [
+                        'media_id' => $media->id,
+                        'thumbnail_path' => $thumbnailPath
+                    ]);
+                } else {
+                    Log::warning('Failed to generate thumbnail', [
+                        'media_id' => $media->id
+                    ]);
+                }
+            } finally {
+                if ($isTempFile && $videoPath && file_exists($videoPath)) {
+                    @unlink($videoPath);
+                }
             }
 
         } catch (\Exception $e) {

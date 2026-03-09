@@ -39,7 +39,7 @@ class CleanupTempUploadsJob implements ShouldQueue
                 return;
             }
 
-            $files = Storage::disk('local')->files($tempUploadsPath);
+            $files = Storage::disk('local')->allFiles($tempUploadsPath);
             $deletedCount = 0;
             $keptCount = 0;
             $errorCount = 0;

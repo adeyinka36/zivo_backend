@@ -79,7 +79,7 @@ class AssignUnassignedMediaJob implements ShouldQueue
                         return false;
                     }
                     
-                    $currentCount = $media->assignments()->count();
+                    $currentCount = $media->assignments()->where('current', true)->count();
                     $neededCount = max(0, $targetViews - $currentCount);
                     
                     return $neededCount > 0;

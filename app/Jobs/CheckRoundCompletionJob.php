@@ -31,7 +31,7 @@ class CheckRoundCompletionJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            $targetViews = (int) config('services.media.target_views', 25);
+            $targetViews = (int) config('services.media.target_views', 10);
 
             $mediaWithCompletedRounds = Media::query()
                 ->where('campaign_completed', false)

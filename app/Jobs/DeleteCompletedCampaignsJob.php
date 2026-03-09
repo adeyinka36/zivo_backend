@@ -64,20 +64,23 @@ class DeleteCompletedCampaignsJob implements ShouldQueue
                 try {
                     $creator = $media->creator;
                     $reason = 'completed';
-                    
+                    $shouldSendEmail = false;
+
                     if (!$media->campaign_completed) {
                         if ($media->to_date && $media->to_date < $cutoffDate) {
                             $reason = 'expired';
                             $media->update(['campaign_completed' => true]);
+                            $shouldSendEmail = true;
                         } elseif ($media->target_reached_at && $media->target_reached_at < $cutoffDate) {
                             $reason = 'target_reached';
                             $media->update(['campaign_completed' => true]);
+                            $shouldSendEmail = true;
                         }
                     }
-                    
-                    if ($creator) {
+
+                    if ($creator && $shouldSendEmail) {
                         SendCampaignCompletionEmailJob::dispatch($creator->id, $media->id, $reason)->afterCommit();
-                        
+
                         Log::info('Sent campaign completion email before deletion', [
                             'media_id' => $media->id,
                             'creator_id' => $creator->id,
