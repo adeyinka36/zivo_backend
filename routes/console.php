@@ -14,18 +14,35 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('media:track-failed-uploads')->weekly();
+//Schedule::command('media:track-failed-uploads')->weekly();
+//
+//Schedule::job(new CleanupAndReassignMediaJob)->cron('0 */6 * * *');
+//
+//Schedule::job(DeleteCompletedCampaignsJob::class)->cron('0 */12 * * *');
+//
+//Schedule::job(new AssignCurrentMediaJob)->cron('0 */2 * * *');
+//
+//Schedule::job(new CheckRoundCompletionJob)->cron('0 */3 * * *');
+//
+//Schedule::job(new AssignUnassignedMediaJob)->everyThirtyMinutes();
+//
+//Schedule::job(new CleanupTempUploadsJob)->hourly();
+//
+//Schedule::command('media:cleanup-unpaid')->everyFifteenMinutes();
 
-Schedule::job(new CleanupAndReassignMediaJob)->cron('0 */6 * * *');
 
-Schedule::job(DeleteCompletedCampaignsJob::class)->cron('0 */12 * * *');
+Schedule::command('media:track-failed-uploads')->everyFiveMinutes();
 
-Schedule::job(new AssignCurrentMediaJob)->cron('0 */2 * * *');
+Schedule::job(new CleanupAndReassignMediaJob)->everyFiveMinutes();
 
-Schedule::job(new CheckRoundCompletionJob)->cron('0 */3 * * *');
+Schedule::job(DeleteCompletedCampaignsJob::class)->everyFiveMinutes();
 
-Schedule::job(new AssignUnassignedMediaJob)->everyThirtyMinutes();
+Schedule::job(new AssignCurrentMediaJob)->everyFiveMinutes();
 
-Schedule::job(new CleanupTempUploadsJob)->hourly();
+Schedule::job(new CheckRoundCompletionJob)->everyFiveMinutes();
 
-Schedule::command('media:cleanup-unpaid')->everyFifteenMinutes();
+Schedule::job(new AssignUnassignedMediaJob)->everyFiveMinutes();
+
+Schedule::job(new CleanupTempUploadsJob)->everyFiveMinutes();
+
+Schedule::command('media:cleanup-unpaid')->everyFiveMinutes();
