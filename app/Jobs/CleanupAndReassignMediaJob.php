@@ -32,11 +32,16 @@ class CleanupAndReassignMediaJob implements ShouldQueue
 
     /**
      * Execute the job.
+     *
+     * 1. Delete stale, unwatched current assignments.
+     * 2. For all eligible media, ensure assignments are topped up to the target
+     *    for the current round (via MediaAssignmentService).
      */
     public function handle(MediaAssignmentService $assignmentService): void
     {
         $cutoffTime = now()->subHours(self::ASSIGNMENT_WINDOW_HOURS);
 
+        // Step 1: remove stale current assignments (older than window, never watched)
         $staleAssignments = UserAssignment::where('current', true)
             ->where('created_at', '<', $cutoffTime)
             ->whereNotExists(function ($query) {
@@ -48,24 +53,19 @@ class CleanupAndReassignMediaJob implements ShouldQueue
             ->with('media')
             ->get();
 
-        if ($staleAssignments->isEmpty()) {
-            Log::info('No stale assignments found for cleanup');
-            return;
-        }
-
-        $mediaToReassign = $staleAssignments->groupBy('media_id');
+        $mediaWithStale = $staleAssignments->groupBy('media_id');
         $deletedCount = 0;
 
-        foreach ($mediaToReassign as $mediaId => $assignments) {
-            $media = Media::with(['locations', 'creator'])->find($mediaId);
+        foreach ($mediaWithStale as $mediaId => $assignments) {
+            $media = Media::find($mediaId);
 
-            if (!$media) {
+            if (! $media) {
                 continue;
             }
 
             $assignmentIds = $assignments->pluck('id')->toArray();
 
-            DB::transaction(function () use ($assignmentIds, $media, $assignmentService, &$deletedCount) {
+            DB::transaction(function () use ($assignmentIds, $media, &$deletedCount) {
                 UserAssignment::whereIn('id', $assignmentIds)->delete();
                 $deletedCount += count($assignmentIds);
 
@@ -73,14 +73,36 @@ class CleanupAndReassignMediaJob implements ShouldQueue
                     'media_id' => $media->id,
                     'deleted_count' => count($assignmentIds),
                 ]);
-
-                $assignmentService->assignMediaToUsers($media);
             });
         }
 
-        Log::info('Cleanup and reassignment completed', [
-            'total_deleted' => $deletedCount,
-            'media_processed' => $mediaToReassign->count(),
+        // Step 2: for all eligible media, top up assignments to target views
+        $now = now()->utc();
+
+        $eligibleMedia = Media::query()
+            ->where('campaign_completed', false)
+            ->where('payment_status', 'paid')
+            ->where('active', true)
+            ->where('mime_type', '!=', 'pending')
+            ->whereNotNull('from_date')
+            ->whereNotNull('to_date')
+            ->where('from_date', '<=', $now)
+            ->where('to_date', '>=', $now)
+            ->whereRaw('rounds_completed < rounds')
+            ->with(['locations', 'creator'])
+            ->get();
+
+        $toppedUpCount = 0;
+
+        foreach ($eligibleMedia as $media) {
+            $assignmentService->assignMediaToUsers($media);
+            $toppedUpCount++;
+        }
+
+        Log::info('CleanupAndReassignMediaJob completed', [
+            'stale_deleted' => $deletedCount,
+            'media_with_stale' => $mediaWithStale->count(),
+            'media_topped_up' => $toppedUpCount,
         ]);
     }
 }
