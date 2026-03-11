@@ -26,6 +26,9 @@ class RewardEmailNotification extends Notification
         $creator = $this->media->creator;
         $offer = $this->media->offer ?: 'your reward';
 
+        $businessName = $creator?->business_name ?: 'our partner business';
+        $businessAddress = $creator?->address;
+
         $fromDate = $this->media->from_date
             ? $this->media->from_date->timezone(config('app.timezone'))->format('j M Y')
             : null;
@@ -34,43 +37,21 @@ class RewardEmailNotification extends Notification
             ? $this->media->to_date->timezone(config('app.timezone'))->format('j M Y')
             : null;
 
-        $validityLine = $fromDate && $toDate
-            ? "• **Valid:** {$fromDate} — {$toDate}"
-            : null;
+        $claimLocation = $businessAddress
+            ? $businessName . ', ' . $businessAddress
+            : $businessName;
 
-        $businessName = $creator?->business_name ?: 'our partner business';
-        $businessAddress = $creator?->address;
-
-        $claimLine = '• **Where to claim:** ';
-        if ($businessAddress) {
-            $claimLine .= $businessName . ', ' . $businessAddress;
-        } else {
-            $claimLine .= $businessName;
-        }
-
-        $message = (new MailMessage)
+        return (new MailMessage)
             ->subject('🎁 You have a reward from ZI-VO')
-            ->greeting('Hi ' . ($notifiable->name ?: 'there') . ',')
-            ->line('Great news – you paid attention and have unlocked earned reward on ZI-VO.')
-            ->line('**Offer Details:**')
-            ->line('• **Offer:** ' . $offer);
-
-        if ($this->code) {
-            $message->line('• **Your code:** ' . $this->code);
-        }
-
-        if ($validityLine) {
-            $message->line($validityLine);
-        }
-
-        $message
-            ->line($claimLine)
-            ->line('When you visit, simply show this email to the business so they can validate and apply your offer.')
-            ->line('This offer is personal to you and linked to your ZI-VO account. Please keep this email safe until you have redeemed it.')
-            ->line('Thank you for paying attention!')
-            ->salutation('Best regards,' . PHP_EOL . 'ZI-VO');
-
-        return $message;
+            ->markdown('mail.reward', [
+                'notifiableName' => $notifiable->name ?: 'there',
+                'offer' => $offer,
+                'code' => $this->code,
+                'hasCode' => !empty($this->code),
+                'fromDate' => $fromDate,
+                'toDate' => $toDate,
+                'claimLocation' => $claimLocation,
+            ]);
     }
 }
 
