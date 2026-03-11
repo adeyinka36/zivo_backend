@@ -8,6 +8,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Http\Requests\Auth\UpdateEmailRequest;
+use App\Jobs\SendEmailVerificationJob;
 use App\Services\Auth\AuthService;
 use App\Services\NotificationService;
 use App\DTOs\Auth\RegisterUserDTO;
@@ -154,7 +155,7 @@ class AuthController extends Controller
             return ErrorResponse::make('Email already verified', 400);
         }
 
-        $user->sendEmailVerificationNotification();
+        dispatch(SendEmailVerificationJob::forUser($user->id))->afterCommit();
 
         return SuccessResponse::make('Verification email sent successfully please check '. $user->email);
     }
@@ -173,7 +174,7 @@ class AuthController extends Controller
             'email_verified_at' => null
         ]);
 
-        $user->sendEmailVerificationNotification();
+        dispatch(SendEmailVerificationJob::forUser($user->id))->afterCommit();
 
         return SuccessResponse::make('Email updated successfully. Please check your new email for verification.');
     }
