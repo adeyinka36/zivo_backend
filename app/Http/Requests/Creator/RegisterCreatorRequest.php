@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Creator;
 
+use App\Models\Creator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
@@ -12,11 +13,29 @@ class RegisterCreatorRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->filled('email')) {
+            $this->merge(['email' => mb_strtolower($this->input('email'))]);
+        }
+    }
+
     public function rules(): array
     {
         return [
             'business_name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email:rfc,dns', 'max:255', 'unique:creators,email', 'indisposable'],
+            'email' => [
+                'required',
+                'string',
+                'email:rfc,dns',
+                'max:255',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (Creator::whereRaw('LOWER(email) = ?', [mb_strtolower($value)])->exists()) {
+                        $fail('This email is already registered.');
+                    }
+                },
+                'indisposable',
+            ],
             'password' => [
                 'required',
                 'confirmed',

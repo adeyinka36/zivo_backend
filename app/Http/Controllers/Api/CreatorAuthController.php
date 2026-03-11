@@ -123,7 +123,7 @@ class CreatorAuthController extends Controller
         try {
             $validated = $request->validated();
 
-            $creator = Creator::where('email', $validated['email'])->first();
+            $creator = Creator::whereRaw('LOWER(email) = ?', [mb_strtolower($validated['email'])])->first();
 
             if (!$creator || !Hash::check($validated['password'], $creator->password)) {
                 return ErrorResponse::make('Invalid credentials.', 401);

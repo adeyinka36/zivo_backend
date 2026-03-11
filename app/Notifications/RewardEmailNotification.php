@@ -38,27 +38,12 @@ class RewardEmailNotification extends Notification
             ? "• **Valid:** {$fromDate} — {$toDate}"
             : null;
 
-        $primaryLocation = $this->media->locations()->first();
-
         $businessName = $creator?->business_name ?: 'our partner business';
         $businessAddress = $creator?->address;
 
-        $locationDescription = null;
-        if ($primaryLocation) {
-            $parts = array_filter([
-                $primaryLocation->region_name,
-                $primaryLocation->country,
-            ]);
-            $locationDescription = implode(', ', $parts);
-        }
-
         $claimLine = '• **Where to claim:** ';
-        if ($businessAddress && $locationDescription) {
-            $claimLine .= $businessName . ', ' . $businessAddress . ' (' . $locationDescription . ')';
-        } elseif ($businessAddress) {
+        if ($businessAddress) {
             $claimLine .= $businessName . ', ' . $businessAddress;
-        } elseif ($locationDescription) {
-            $claimLine .= $businessName . ' in ' . $locationDescription;
         } else {
             $claimLine .= $businessName;
         }

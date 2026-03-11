@@ -27,7 +27,7 @@ readonly class AuthService
             $user = $this->userRepository->create([
                 'name' => $dto->name,
                 'username' => $dto->username,
-                'email' => $dto->email,
+                'email' => mb_strtolower($dto->email),
                 'password' => $dto->password,
             ]);
 
@@ -77,8 +77,11 @@ readonly class AuthService
 
     public function forgotPassword(PasswordResetDTO $dto): void
     {
-        $status = Password::sendResetLink(['email' => $dto->email]);
-        
+        $user = User::whereRaw('LOWER(email) = ?', [mb_strtolower($dto->email)])->first();
+        if (!$user) {
+            throw new \Exception('Unable to send password reset link');
+        }
+        $status = Password::sendResetLink(['email' => $user->email]);
         if ($status !== Password::RESET_LINK_SENT) {
             throw new \Exception('Unable to send password reset link');
         }

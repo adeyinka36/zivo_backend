@@ -2,16 +2,22 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 
 class RegisterRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        Log::info('----->',request()->all());
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->filled('email')) {
+            $this->merge(['email' => mb_strtolower($this->input('email'))]);
+        }
     }
 
     public function rules(): array
@@ -19,7 +25,18 @@ class RegisterRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'max:255', 'unique:users,username'],
-            'email' => ['required', 'string', 'email:rfc,dns', 'max:255', 'unique:users,email', 'indisposable'],
+            'email' => [
+                'required',
+                'string',
+                'email:rfc,dns',
+                'max:255',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (User::whereRaw('LOWER(email) = ?', [mb_strtolower($value)])->exists()) {
+                        $fail('This email is already registered.');
+                    }
+                },
+                'indisposable',
+            ],
             'password' => [
                 'required',
                 'confirmed',

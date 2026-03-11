@@ -4,14 +4,16 @@ namespace App\Repositories;
 
 use App\Models\User;
 use App\Repositories\Contracts\AuthRepositoryInterface;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 
 class AuthRepository implements AuthRepositoryInterface
 {
     public function authenticate(string $email, string $password): ?User
     {
-        if (Auth::attempt(['email' => $email, 'password' => $password])) {
-            return Auth::user();
+        $normalized = mb_strtolower($email);
+        $user = User::whereRaw('LOWER(email) = ?', [$normalized])->first();
+        if ($user && Hash::check($password, $user->password)) {
+            return $user;
         }
         return null;
     }
