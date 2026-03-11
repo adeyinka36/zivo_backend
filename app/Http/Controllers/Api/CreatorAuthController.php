@@ -9,7 +9,6 @@ use App\Http\Requests\Creator\LoginCreatorRequest;
 use App\Http\Requests\Creator\UpdateCreatorVerificationRequest;
 use App\Http\Responses\SuccessResponse;
 use App\Http\Responses\ErrorResponse;
-use App\Jobs\SendEmailVerificationJob;
 use App\Models\Creator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,7 +33,7 @@ class CreatorAuthController extends Controller
                 'secret' => Str::random(60),
             ]);
 
-            dispatch(SendEmailVerificationJob::forCreator($creator->id))->afterCommit();
+            $creator->sendEmailVerificationNotification();
             $token = $creator->createToken('creator-auth-token')->plainTextToken;
 
             return SuccessResponse::make(

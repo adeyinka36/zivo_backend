@@ -6,7 +6,6 @@ use App\DTOs\Auth\AuthResponseDTO;
 use App\DTOs\Auth\LoginCredentialsDTO;
 use App\DTOs\Auth\RegisterUserDTO;
 use App\DTOs\Auth\PasswordResetDTO;
-use App\Jobs\SendEmailVerificationJob;
 use App\Models\User;
 use App\Repositories\Contracts\AuthRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
@@ -32,7 +31,7 @@ readonly class AuthService
                 'password' => $dto->password,
             ]);
 
-            dispatch(SendEmailVerificationJob::forUser($user->id))->afterCommit();
+            $user->sendEmailVerificationNotification();
             $token = $this->authRepository->createToken($user);
 
             return new AuthResponseDTO(
