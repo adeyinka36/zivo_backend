@@ -185,13 +185,8 @@ class Media extends Model
 //                    GenerateThumbnailJob::dispatch($media->id)->afterCommit();
 //                }
 
-                // Assign media to users only if no location IDs exist
-                // If location IDs exist, ProcessMediaUploadJob will dispatch AssignMediaToUsersJob
-                $hasLocationIds = $media->locations()->exists();
-
-                if (!$hasLocationIds) {
-                    AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
-                }
+                // Assign media to users (AssignMediaToUsersJob filters by location when media has locations)
+                AssignMediaToUsersJob::dispatch($media->id)->afterCommit();
 
                 // Send notifications if creator exists
                 if ($media->creator_id) {
@@ -199,6 +194,7 @@ class Media extends Model
                     SendEmailNotificationJob::dispatch($media->creator_id, $media->id)->afterCommit();
                 }
 
+                $hasLocationIds = $media->locations()->exists();
                 Log::info('Dependent jobs dispatched after media processing', [
                     'media_id' => $media->id,
                     'path' => $media->path,
