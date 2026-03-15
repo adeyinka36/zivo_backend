@@ -167,7 +167,11 @@ class MediaService
 
 
     /**
-     * Create questions for media
+     * Create questions for media.
+     *
+     * When a question includes valid 'options' (exactly 3 strings, all different from the answer),
+     * those are the 3 wrong options; the correct answer plus these 3 form the 4 choices.
+     * Otherwise the 3 wrong options are generated via generateOptions().
      */
     public function createQuestions(Media $media, ?array $questions = null): void
     {
@@ -179,7 +183,7 @@ class MediaService
         if (!empty($questions) && is_array($questions)) {
             foreach ($questions as $questionData) {
                 if (
-                    isset($questionData['question']) && 
+                    isset($questionData['question']) &&
                     isset($questionData['answer']) &&
                     !empty(trim($questionData['question'])) &&
                     !empty(trim($questionData['answer']))
@@ -187,6 +191,7 @@ class MediaService
                     $validQuestions[] = [
                         'question' => trim($questionData['question']),
                         'answer' => trim($questionData['answer']),
+                        'options' => $this->normalizeUserOptions($questionData['options'] ?? null),
                     ];
                 }
             }
@@ -194,17 +199,28 @@ class MediaService
 
         if (!empty($validQuestions)) {
             foreach ($validQuestions as $questionData) {
-                $answerWord = strtolower($questionData['answer']);
-                $options = $this->generateOptions($answerWord);
-                
-                $media->questions()->create([
-                    'question' => $questionData['question'],
-                    'answer' => $options['correct_option'],
-                    'option_a' => $options['options'][0],
-                    'option_b' => $options['options'][1],
-                    'option_c' => $options['options'][2],
-                    'option_d' => $options['options'][3],
-                ]);
+                $answerWord = $questionData['answer'];
+                $userOptions = $questionData['options'];
+
+                if ($userOptions !== null) {
+                    $row = $this->buildQuestionFromUserOptions(
+                        $questionData['question'],
+                        $answerWord,
+                        $userOptions
+                    );
+                } else {
+                    $generated = $this->generateOptions(strtolower($answerWord));
+                    $row = [
+                        'question' => $questionData['question'],
+                        'answer' => $generated['correct_option'],
+                        'option_a' => $generated['options'][0],
+                        'option_b' => $generated['options'][1],
+                        'option_c' => $generated['options'][2],
+                        'option_d' => $generated['options'][3],
+                    ];
+                }
+
+                $media->questions()->create($row);
             }
         } else {
             $options = $this->generateOptions('zivo');
@@ -217,6 +233,85 @@ class MediaService
                 'option_d' => $options['options'][3],
             ]);
         }
+    }
+
+    /**
+     * Normalize user-provided options: return array of 3 trimmed strings if valid, else null.
+     *
+     * @param mixed $options
+     * @return array<int, string>|null
+     */
+    private function normalizeUserOptions(mixed $options): ?array
+    {
+        if (!is_array($options) || count($options) !== 3) {
+            return null;
+        }
+        $trimmed = array_map(fn ($o) => trim((string) $o), $options);
+        foreach ($trimmed as $o) {
+            if ($o === '') {
+                return null;
+            }
+        }
+        return $trimmed;
+    }
+
+    /**
+     * Build question row using 3 user-provided wrong options plus the correct answer.
+     *
+     * @param string $questionText
+     * @param string $answerText
+     * @param array<int, string> $userOptions The 3 wrong options (distractors)
+     * @return array{question: string, answer: string, option_a: string, option_b: string, option_c: string, option_d: string}
+     */
+    private function buildQuestionFromUserOptions(string $questionText, string $answerText, array $userOptions): array
+    {
+        $answerLower = strtolower($answerText);
+        $userLower = array_map('strtolower', $userOptions);
+        if (in_array($answerLower, $userLower, true)) {
+            return $this->buildQuestionFromGenerated($questionText, $answerText);
+        }
+
+        $allFour = array_merge([$answerText], $userOptions);
+        shuffle($allFour);
+
+        $optionLetters = ['A', 'B', 'C', 'D'];
+        $idx = null;
+        foreach ($allFour as $i => $opt) {
+            if (strcasecmp($opt, $answerText) === 0) {
+                $idx = $i;
+                break;
+            }
+        }
+        $correctLetter = ($idx !== null && isset($optionLetters[$idx])) ? $optionLetters[$idx] : 'A';
+
+        return [
+            'question' => $questionText,
+            'answer' => $correctLetter,
+            'option_a' => $allFour[0],
+            'option_b' => $allFour[1],
+            'option_c' => $allFour[2],
+            'option_d' => $allFour[3],
+        ];
+    }
+
+    /**
+     * Fallback when user options are invalid: use full generation.
+     *
+     * @param string $questionText
+     * @param string $answerText
+     * @return array{question: string, answer: string, option_a: string, option_b: string, option_c: string, option_d: string}
+     */
+    private function buildQuestionFromGenerated(string $questionText, string $answerText): array
+    {
+        $generated = $this->generateOptions(strtolower($answerText));
+        return [
+            'question' => $questionText,
+            'answer' => $generated['correct_option'],
+            'option_a' => $generated['options'][0],
+            'option_b' => $generated['options'][1],
+            'option_c' => $generated['options'][2],
+            'option_d' => $generated['options'][3],
+        ];
     }
 
     /**

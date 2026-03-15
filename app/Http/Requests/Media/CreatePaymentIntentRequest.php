@@ -34,6 +34,8 @@ class CreatePaymentIntentRequest extends FormRequest
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:50',
             'questions.*.answer' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
+            'questions.*.options' => 'nullable|array|size:3',
+            'questions.*.options.*' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
             'location_id' => 'nullable|integer|exists:locations,id',
             'from_date' => 'required|date',
             'to_date' => 'required|date|after:from_date',
@@ -69,7 +71,10 @@ class CreatePaymentIntentRequest extends FormRequest
             'questions.*.answer.required' => 'Correct answer is required.',
             'questions.*.answer.max' => 'Answer cannot exceed 38 characters.',
             'questions.*.answer.regex' => 'Answer may only contain letters, numbers, and spaces.',
-            
+            'questions.*.options.size' => 'When providing options, exactly 3 are required.',
+            'questions.*.options.*.max' => 'Each option cannot exceed 38 characters.',
+            'questions.*.options.*.regex' => 'Options may only contain letters, numbers, and spaces.',
+
             'file.nullable' => 'File is optional.',
             'file.file' => 'The uploaded file is invalid.',
             'file.max' => 'The file size must not exceed 5GB.',
@@ -91,6 +96,22 @@ class CreatePaymentIntentRequest extends FormRequest
                 }
             }
             
+            $questions = $this->input('questions', []);
+            foreach ($questions as $qIndex => $q) {
+                if (!empty($q['options']) && is_array($q['options']) && count($q['options']) === 3) {
+                    $answer = trim((string) ($q['answer'] ?? ''));
+                    $optionValues = array_map(fn ($o) => trim((string) $o), $q['options']);
+                    foreach ($optionValues as $oi => $opt) {
+                        if (strcasecmp($opt, $answer) === 0) {
+                            $validator->errors()->add(
+                                "questions.{$qIndex}.options.{$oi}",
+                                'Each option must be different from the correct answer (these are wrong choices).'
+                            );
+                        }
+                    }
+                }
+            }
+
             // Radius-based targeting has been removed; only explicit locations are supported.
         });
     }

@@ -40,6 +40,8 @@ class StoreMediaRequest extends FormRequest
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:50',
             'questions.*.answer' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
+            'questions.*.options' => 'nullable|array|size:3',
+            'questions.*.options.*' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
         ];
     }
 
@@ -59,6 +61,9 @@ class StoreMediaRequest extends FormRequest
             'questions.*.answer.required' => 'Correct answer is required.',
             'questions.*.answer.max' => 'Answer may not be greater than 38 characters.',
             'questions.*.answer.regex' => 'Answer may only contain letters, numbers, and spaces.',
+            'questions.*.options.size' => 'When providing options, exactly 3 are required.',
+            'questions.*.options.*.max' => 'Each option cannot exceed 38 characters.',
+            'questions.*.options.*.regex' => 'Options may only contain letters, numbers, and spaces.',
         ];
     }
 }

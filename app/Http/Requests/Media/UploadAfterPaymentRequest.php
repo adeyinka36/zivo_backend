@@ -44,6 +44,8 @@ class UploadAfterPaymentRequest extends FormRequest
             'questions' => 'nullable|array|max:20',
             'questions.*.question' => 'required|string|max:50',
             'questions.*.answer' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
+            'questions.*.options' => 'nullable|array|size:3',
+            'questions.*.options.*' => 'required|string|max:38|regex:/^[a-zA-Z0-9\s]+$/',
             'location_id' => 'nullable|integer|exists:locations,id',
             'location_selections' => 'nullable|array',
             'location_selections.*.type' => 'required|string|in:city,country,continent',
@@ -120,6 +122,22 @@ class UploadAfterPaymentRequest extends FormRequest
                 }
             }
 
+            $questions = $this->input('questions', []);
+            foreach ($questions as $qIndex => $q) {
+                if (!empty($q['options']) && is_array($q['options']) && count($q['options']) === 3) {
+                    $answer = trim((string) ($q['answer'] ?? ''));
+                    $optionValues = array_map(fn ($o) => trim((string) $o), $q['options']);
+                    foreach ($optionValues as $oi => $opt) {
+                        if (strcasecmp($opt, $answer) === 0) {
+                            $validator->errors()->add(
+                                "questions.{$qIndex}.options.{$oi}",
+                                'Each option must be different from the correct answer (these are wrong choices).'
+                            );
+                        }
+                    }
+                }
+            }
+
             $hasLocationId = $this->filled('location_id');
             $hasLocationSelections = $this->filled('location_selections');
 
@@ -165,6 +183,10 @@ class UploadAfterPaymentRequest extends FormRequest
             'questions.*.answer.required' => 'Correct answer is required.',
             'questions.*.answer.max' => 'Answer cannot exceed 38 characters.',
             'questions.*.answer.regex' => 'Answer may only contain letters, numbers, and spaces.',
+            'questions.*.options.size' => 'When providing options, exactly 3 are required.',
+            'questions.*.options.*.required_with' => 'Each option is required when options are provided.',
+            'questions.*.options.*.max' => 'Each option cannot exceed 38 characters.',
+            'questions.*.options.*.regex' => 'Options may only contain letters, numbers, and spaces.',
         ];
     }
 }
