@@ -20,7 +20,7 @@ class PlatformController extends Controller
         $cacheKey = 'platform_info';
         $cacheDuration = 3600; // 1 hour
 
-        $data = Cache::remember($cacheKey, $cacheDuration, function () {
+        $data = Cache::remember($cacheKey, $cacheDuration, function (): array {
             $aboutVideoUrl = $this->resolveVideoUrl(
                 'platform.about_video_url',
                 config('platform.about_video_path', 'platform/about-video.mp4'),
@@ -63,6 +63,9 @@ class PlatformController extends Controller
                 ],
             ];
         });
+
+        // Not cached: toggling .env should affect the app without waiting for platform_info cache TTL.
+        $data['blocking_permissions'] = (bool) config('zivo.blocking_permissions', true);
 
         return response()->json($data);
     }
