@@ -16,10 +16,12 @@ class CampaignCode extends Model
         'user_id',
         'code',
         'assigned_at',
+        'claimed_at',
     ];
 
     protected $casts = [
         'assigned_at' => 'datetime',
+        'claimed_at' => 'datetime',
     ];
 
     public function media(): BelongsTo

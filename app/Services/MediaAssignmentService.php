@@ -144,7 +144,6 @@ class MediaAssignmentService
         }
 
         $query = User::query()
-            ->whereNotNull('email_verified_at')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->where('latitude', '!=', 0)
@@ -211,8 +210,7 @@ class MediaAssignmentService
      */
     private function getUsers(Media $media, int $limit, array $excludeUserIds, UserScoringService $scoringService): array
     {
-        $query = User::whereNotNull('email_verified_at')
-            ->whereNotIn('id', $excludeUserIds);
+        $query = User::whereNotIn('id', $excludeUserIds);
 
         $scoringService->addScoringToQuery($query, $media, null, null, null);
         $scoringService->orderByScore($query);

@@ -26,10 +26,10 @@ class MediaWatchService
         return DB::transaction(function () use ($media, $user) {
             $isEmailVerified = $user->hasVerifiedEmail();
             
-            $watchRecord = $this->recordWatch($media, $user, $isEmailVerified);
+            $watchRecord = $this->recordWatch($media, $user);
             $watchCount = $media->getWatchCount();
             
-            $quizData = $this->handleQuizTrigger($media, $user, $watchCount, $isEmailVerified, $watchRecord['was_new']);
+            $quizData = $this->handleQuizTrigger($media, $user, $watchCount, $watchRecord['was_new']);
 
             $media->refresh();
             
@@ -47,10 +47,9 @@ class MediaWatchService
      *
      * @param Media $media
      * @param User $user
-     * @param bool $isEmailVerified
      * @return array{was_new: bool, recorded: bool}
      */
-    private function recordWatch(Media $media, User $user, bool $isEmailVerified): array
+    private function recordWatch(Media $media, User $user): array
     {
         $hasAssignment = UserAssignment::where('user_id', $user->id)
             ->where('media_id', $media->id)
@@ -61,7 +60,6 @@ class MediaWatchService
             Log::warning('Watch attempt by unassigned user', [
                 'user_id' => $user->id,
                 'media_id' => $media->id,
-                'email_verified' => $isEmailVerified,
             ]);
 
             return [
@@ -79,7 +77,7 @@ class MediaWatchService
 
         return [
             'was_new' => $wasNewRecord,
-            'recorded' => $isEmailVerified,
+            'recorded' => true,
         ];
     }
 
@@ -89,7 +87,6 @@ class MediaWatchService
      * @param Media $media
      * @param User $user
      * @param int $watchCount
-     * @param bool $isEmailVerified
      * @param bool $wasNewWatch
      * @return MediaWithQuestionResource|null
      */
@@ -97,10 +94,9 @@ class MediaWatchService
         Media $media,
         User $user,
         int $watchCount,
-        bool $isEmailVerified,
         bool $wasNewWatch
     ): ?MediaWithQuestionResource {
-        if (!$isEmailVerified || !$wasNewWatch) {
+        if (!$wasNewWatch) {
             return null;
         }
 

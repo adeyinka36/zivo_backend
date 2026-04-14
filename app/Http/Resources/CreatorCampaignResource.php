@@ -23,6 +23,7 @@ class CreatorCampaignResource extends JsonResource
         $codes = $this->codes()->with('user')->orderBy('created_at')->get();
         $totalCodes = $codes->count();
         $usedCodes = $codes->whereNotNull('user_id')->count();
+        $claimedCodes = $codes->whereNotNull('claimed_at')->count();
         $availableCodes = $totalCodes - $usedCodes;
 
         $now = now();
@@ -65,13 +66,17 @@ class CreatorCampaignResource extends JsonResource
                 'total' => $totalCodes,
                 'used' => $usedCodes,
                 'available' => $availableCodes,
+                'claimed' => $claimedCodes,
             ],
             'codes' => $codes->map(function ($code) {
                 return [
+                    'id' => $code->id,
                     'code' => $code->code,
                     'assigned' => (bool) $code->user_id,
                     'assigned_to' => $code->user?->email,
                     'assigned_at' => $code->assigned_at,
+                    'claimed' => $code->claimed_at !== null,
+                    'claimed_at' => $code->claimed_at,
                 ];
             }),
         ];

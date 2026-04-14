@@ -19,7 +19,7 @@ use Throwable;
  *
  * Uses proximity around configured location coordinates, with a sensible
  * radius expansion strategy. If no valid locations are present, it falls
- * back to random selection among verified users.
+ * back to random selection among eligible users.
  */
 class AssignMediaToUsersJob implements ShouldQueue
 {
@@ -144,9 +144,9 @@ class AssignMediaToUsersJob implements ShouldQueue
      * Select users using progressive radius expansion around the media's location.
      *
      * Strategy:
-     * 1. If no location context, select random verified users.
+     * 1. If no location context, select random users.
      * 2. Expand radius from INITIAL_RADIUS (1 km) doubling each step up to MAX_LOCATION_RADIUS (500 km).
-     * 3. If radius expansion still hasn't found enough users, fall back to random verified users.
+     * 3. If radius expansion still hasn't found enough users, fall back to random users.
      *
      * @param Media $media
      * @param int $neededCount
@@ -252,7 +252,6 @@ class AssignMediaToUsersJob implements ShouldQueue
         }
 
         $query = User::query()
-            ->whereNotNull('email_verified_at')
             ->whereNotIn('id', $excludeUserIds)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
@@ -289,7 +288,6 @@ class AssignMediaToUsersJob implements ShouldQueue
         array $excludeUserIds
     ): array {
         $query = User::query()
-            ->whereNotNull('email_verified_at')
             ->whereNotIn('id', $excludeUserIds);
 
         return $query

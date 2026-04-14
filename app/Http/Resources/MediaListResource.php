@@ -24,7 +24,7 @@ class MediaListResource extends JsonResource
                     ->toArray() : [];
         }
 
-        $hasWatched = $user && in_array($this->id, self::$watchedMediaIds) && $user->email_verified_at;
+        $hasWatched = $user && in_array($this->id, self::$watchedMediaIds);
 
         return [
             'id' => $this->id,
