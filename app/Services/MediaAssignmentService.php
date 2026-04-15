@@ -148,6 +148,7 @@ class MediaAssignmentService
             ->whereNotNull('longitude')
             ->where('latitude', '!=', 0)
             ->where('longitude', '!=', 0)
+            ->where('active', true)
             ->whereNotIn('id', $excludeUserIds);
 
         if (count($coordinates) === 1) {
@@ -210,7 +211,8 @@ class MediaAssignmentService
      */
     private function getUsers(Media $media, int $limit, array $excludeUserIds, UserScoringService $scoringService): array
     {
-        $query = User::whereNotIn('id', $excludeUserIds);
+        $query = User::whereNotIn('id', $excludeUserIds)
+            ->where('active', true);
 
         $scoringService->addScoringToQuery($query, $media, null, null, null);
         $scoringService->orderByScore($query);

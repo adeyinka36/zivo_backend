@@ -253,6 +253,7 @@ class AssignMediaToUsersJob implements ShouldQueue
 
         $query = User::query()
             ->whereNotIn('id', $excludeUserIds)
+            ->where('active', true)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->where('latitude', '!=', 0)
@@ -288,7 +289,8 @@ class AssignMediaToUsersJob implements ShouldQueue
         array $excludeUserIds
     ): array {
         $query = User::query()
-            ->whereNotIn('id', $excludeUserIds);
+            ->whereNotIn('id', $excludeUserIds)
+            ->where('active', true);
 
         return $query
             ->inRandomOrder()
