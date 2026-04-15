@@ -15,7 +15,6 @@ use App\Http\Resources\MediaResource;
 use App\Http\Resources\MediaListResource;
 use App\Http\Resources\MediaWithQuestionResource;
 use App\Jobs\AllocateReward;
-use App\Jobs\SendRewardEmailJob;
 use App\Jobs\ProcessMediaUploadJob;
 use App\Jobs\UploadFileToS3Job;
 use App\Services\MediaWatchService;
@@ -447,15 +446,11 @@ class MediaController extends Controller
                             'user_id' => $user->id,
                             'assigned_at' => now(),
                         ]);
-
-                        SendRewardEmailJob::dispatch($user->id, $media->id, $code->code)->afterCommit();
                     } else {
                         \Illuminate\Support\Facades\Log::warning('No available campaign codes when awarding reward', [
                             'media_id' => $media->id,
                             'user_id' => $user->id,
                         ]);
-
-                        SendRewardEmailJob::dispatch($user->id, $media->id, null)->afterCommit();
                     }
                 });
             }

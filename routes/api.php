@@ -57,6 +57,7 @@ Route::prefix('v1')->group(function () {
             return new \App\Http\Resources\UserResource($user);
         })->middleware('ensure.user');
         Route::post('/logout', [AuthController::class, 'logout'])->middleware('ensure.user');
+        Route::delete('/user', [AuthController::class, 'deleteAccount'])->middleware('ensure.user');
         Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail'])->middleware('ensure.user');
         Route::post('/update-email', [AuthController::class, 'updateEmail'])->middleware('ensure.user');
 

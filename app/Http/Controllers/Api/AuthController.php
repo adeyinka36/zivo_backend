@@ -19,6 +19,7 @@ use App\Exceptions\Auth\InvalidCredentialsException;
 use App\Exceptions\Auth\RegistrationFailedException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Hash;
@@ -176,5 +177,21 @@ class AuthController extends Controller
         $user->sendEmailVerificationNotification();
 
         return SuccessResponse::make('Email updated successfully. Please check your new email for verification.');
+    }
+
+    public function deleteAccount(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!$user instanceof \App\Models\User) {
+            return ErrorResponse::make('Unauthorized. User authentication required.', 401);
+        }
+
+        DB::transaction(function () use ($user): void {
+            $user->tokens()->delete();
+            $user->delete();
+        });
+
+        return SuccessResponse::make('Account deleted successfully');
     }
 }
