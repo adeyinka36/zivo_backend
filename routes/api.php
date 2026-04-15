@@ -74,7 +74,8 @@ Route::prefix('v1')->group(function () {
         Route::post('media/upload-after-payment', [MediaController::class, 'uploadAfterPayment'])->middleware('ensure.creator');
         Route::get('media/{id}', [MediaController::class, 'show']);
         Route::delete('media/{id}', [MediaController::class, 'destroy'])->middleware('ensure.creator');
-        Route::post('media-watched/{media}/{user}', [MediaController::class, 'markAsWatched']);
+        Route::post('media-watched/{media}', [MediaController::class, 'markAsWatched'])
+            ->middleware('ensure.user');
 
         Route::get('payments/{paymentId}/status', [PaymentController::class, 'getPaymentStatus'])->middleware('ensure.creator');
         Route::get('payments/history', [PaymentController::class, 'getPaymentHistory'])->middleware('ensure.creator');

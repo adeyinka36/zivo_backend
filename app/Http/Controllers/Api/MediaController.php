@@ -244,18 +244,27 @@ class MediaController extends Controller
     }
 
     /**
-     * Mark media as watched.
+     * Mark media as watched for the authenticated user.
      *
+     * @param MarkAsWatchedRequest $request
      * @param Media $media
-     * @param User $user
      * @param MediaWatchService $watchService
      * @return JsonResponse
      */
     public function markAsWatched(
+        MarkAsWatchedRequest $request,
         Media $media,
-        User $user,
         MediaWatchService $watchService
     ): JsonResponse {
+        $user = $request->user();
+
+        if (!$user instanceof User) {
+            return response()->json([
+                'message' => 'Unauthorized. User authentication required.',
+                'success' => false,
+            ], 401);
+        }
+
         try {
             $result = $watchService->markAsWatched($media, $user);
 
@@ -425,7 +434,7 @@ class MediaController extends Controller
                 'user_id' => $user?->id,
             ]);
 
-            if ($user instanceof \App\Models\User) {
+            if ($user instanceof User) {
                 \Illuminate\Support\Facades\DB::transaction(function () use ($media, $user) {
                     $code = \App\Models\CampaignCode::where('media_id', $media->id)
                         ->whereNull('user_id')
