@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -187,11 +188,25 @@ class AuthController extends Controller
             return ErrorResponse::make('Unauthorized. User authentication required.', 401);
         }
 
-        DB::transaction(function () use ($user): void {
-            $user->tokens()->delete();
-            $user->delete();
-        });
+        try {
+            DB::transaction(function () use ($user): void {
+                $user->tokens()->delete();
 
-        return SuccessResponse::make('Account deleted successfully');
+                /*
+                 * Delete directly via query builder to avoid model-level media-library
+                 * hooks attempting polymorphic media lookups against the custom media table schema.
+                 */
+                DB::table('users')->where('id', $user->id)->delete();
+            });
+
+            return SuccessResponse::make('Account deleted successfully');
+        } catch (Throwable $e) {
+            Log::error('Failed to delete user account', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ErrorResponse::make('Failed to delete account. Please try again.', 500);
+        }
     }
 }
