@@ -10,7 +10,7 @@ use Illuminate\Http\JsonResponse;
 class DiscoverCampaignController extends Controller
 {
     /**
-     * Random sample of ongoing campaigns for in-app discovery (no media URLs).
+     * Up to 20 random campaigns (or all rows if fewer than 20); informational fields only (no media file URLs).
      */
     public function index(CampaignDiscoveryService $campaignDiscoveryService): JsonResponse
     {
