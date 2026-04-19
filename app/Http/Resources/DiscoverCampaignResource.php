@@ -36,6 +36,7 @@ class DiscoverCampaignResource extends JsonResource
             'to_date' => $media->to_date,
             'rounds' => $media->rounds,
             'rounds_completed' => $media->rounds_completed,
+            'listed_at' => $media->created_at,
         ];
     }
 
