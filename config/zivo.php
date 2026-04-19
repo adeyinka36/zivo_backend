@@ -9,4 +9,12 @@ return [
         env('BLOCKING_PERMISSIONS', true),
         FILTER_VALIDATE_BOOLEAN
     ),
+
+    /**
+     * Mobile app: when true, platform-info exposes campaigns discovery and GET /discover/campaigns is allowed.
+     */
+    'show_campaigns_list' => filter_var(
+        env('SHOW_CAMPAIGNS_LIST', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
 ];

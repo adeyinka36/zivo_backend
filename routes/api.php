@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PlatformController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\RewardController;
+use App\Http\Controllers\Api\DiscoverCampaignController;
 use App\Http\Controllers\Api\UserLocationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -66,6 +67,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/users/push-token', [ProfileController::class, 'updatePushToken'])->middleware('ensure.user');
         Route::get('/user/media', [ProfileController::class, 'getUserMedia'])->middleware('ensure.user');
         Route::get('/user/rewards', [RewardController::class, 'index'])->middleware('ensure.user');
+        Route::get('/discover/campaigns', [DiscoverCampaignController::class, 'index'])->middleware('ensure.user');
         Route::put('/users/location', [UserLocationController::class, 'update'])->middleware('ensure.user');
 
         Route::get('locations', [LocationController::class, 'index']);
