@@ -9,6 +9,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class MediaListResource extends JsonResource
 {
     private static $watchedMediaIds = null;
+    private static $rewardMediaIds = null;
     private static $currentUser = null;
 
     public function toArray(Request $request): array
@@ -22,9 +23,14 @@ class MediaListResource extends JsonResource
                 \App\Models\MediaUserWatched::where('user_id', $user->id)
                     ->pluck('media_id')
                     ->toArray() : [];
+            self::$rewardMediaIds = $user ?
+                \App\Models\CampaignCode::where('user_id', $user->id)
+                    ->pluck('media_id')
+                    ->toArray() : [];
         }
 
         $hasWatched = $user && in_array($this->id, self::$watchedMediaIds);
+        $hasReward = $user && in_array($this->id, self::$rewardMediaIds);
 
         return [
             'id' => $this->id,
@@ -34,6 +40,7 @@ class MediaListResource extends JsonResource
             'offer' => $this->offer,
             'created_at' => $this->created_at,
             'has_watched' => $hasWatched,
+            'has_reward' => $hasReward,
             'thumbnail' => $this->getThumbnailUrl(),
             'uploader_username' => $this->whenLoaded('creator', fn() => $this->creator->business_name),
             'view_count' => $this->view_count,
