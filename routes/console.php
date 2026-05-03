@@ -16,7 +16,7 @@ Artisan::command('inspire', function () {
 
 Schedule::command('media:track-failed-uploads')->weekly();
 
-Schedule::job(new CleanupAndReassignMediaJob)->cron('0 */6 * * *');
+Schedule::job(new CleanupAndReassignMediaJob)->everyFifteenMinutes();
 
 Schedule::job(DeleteCompletedCampaignsJob::class)->cron('0 */12 * * *');
 

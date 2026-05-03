@@ -8,7 +8,9 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Http\Requests\Auth\UpdateEmailRequest;
+use App\Http\Requests\Auth\RefreshTokenRequest;
 use App\Services\Auth\AuthService;
+use App\Exceptions\Auth\InvalidRefreshTokenException;
 use App\Services\NotificationService;
 use App\DTOs\Auth\RegisterUserDTO;
 use App\DTOs\Auth\LoginCredentialsDTO;
@@ -63,6 +65,20 @@ class AuthController extends Controller
             );
         } catch (InvalidCredentialsException $e) {
             return ErrorResponse::make($e->getMessage(), $e->getCode());
+        }
+    }
+
+    public function refresh(RefreshTokenRequest $request): JsonResponse
+    {
+        try {
+            $response = $this->authService->refreshAccessToken($request->validated('refresh_token'));
+
+            return SuccessResponse::make(
+                $response->message,
+                $response->toArray()['data']
+            );
+        } catch (InvalidRefreshTokenException $e) {
+            return ErrorResponse::make($e->getMessage(), 401);
         }
     }
 

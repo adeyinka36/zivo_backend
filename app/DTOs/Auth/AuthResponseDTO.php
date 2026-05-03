@@ -10,16 +10,23 @@ readonly class AuthResponseDTO
         public User $user,
         public string $token,
         public string $message = 'Success',
+        public ?string $refreshToken = null,
     ) {}
 
     public function toArray(): array
     {
+        $data = [
+            'user' => new \App\Http\Resources\UserResource($this->user),
+            'token' => $this->token,
+        ];
+
+        if ($this->refreshToken !== null) {
+            $data['refreshToken'] = $this->refreshToken;
+        }
+
         return [
             'message' => $this->message,
-            'data' => [
-                'user' => new \App\Http\Resources\UserResource($this->user),
-                'token' => $this->token,
-            ]
+            'data' => $data,
         ];
     }
 }

@@ -47,7 +47,14 @@ return [
     |
     */
 
-    'expiration' => null,
+    /*
+     * Minutes until Sanctum access tokens expire. When null, tokens do not expire by time.
+     * Use with mobile refresh tokens so sessions can be renewed without re-login.
+     * Example: 10080 = 7 days.
+     */
+    'expiration' => env('SANCTUM_ACCESS_TOKEN_EXPIRATION') !== null && env('SANCTUM_ACCESS_TOKEN_EXPIRATION') !== ''
+        ? (int) env('SANCTUM_ACCESS_TOKEN_EXPIRATION')
+        : null,
 
     /*
     |--------------------------------------------------------------------------

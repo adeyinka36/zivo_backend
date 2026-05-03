@@ -112,4 +112,16 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Mobile refresh tokens (Sanctum companion)
+    |--------------------------------------------------------------------------
+    |
+    | Stored hashed in user_refresh_tokens; plain token returned once per login
+    | or refresh. Access tokens may expire sooner via SANCTUM_ACCESS_TOKEN_EXPIRATION.
+    |
+    */
+
+    'refresh_token_expiration_days' => (int) env('REFRESH_TOKEN_EXPIRATION_DAYS', 90),
+
 ];
