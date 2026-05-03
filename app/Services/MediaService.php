@@ -90,33 +90,72 @@ class MediaService
     /**
      * Delete a media file.
      *
+     * Removes temp upload file (local), main asset, and thumbnail when present,
+     * then deletes the model (DB cascades remove campaigns, payments, assignments, etc.).
+     *
      * @param Media $media
      * @return bool
      */
     public function delete(Media $media): bool
     {
-        // Skip storage deletion for external URLs (disk = 'url')
-        // These are external files not managed by our storage system
-        if ($media->disk !== 'url') {
+        $this->deleteStoredBinaryAssets($media);
+
+        return $media->delete();
+    }
+
+    /**
+     * Best-effort removal of files backing this media record (never blocks DB delete).
+     */
+    private function deleteStoredBinaryAssets(Media $media): void
+    {
+        if ($media->temp_file_path && $media->temp_file_path !== '') {
+            try {
+                if (Storage::disk('local')->exists($media->temp_file_path)) {
+                    Storage::disk('local')->delete($media->temp_file_path);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to delete temp upload file from local storage', [
+                    'media_id' => $media->id,
+                    'temp_file_path' => $media->temp_file_path,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($media->disk === 'url') {
+            Log::info('Skipping storage deletion for external URL', [
+                'media_id' => $media->id,
+                'path' => $media->path,
+            ]);
+
+            return;
+        }
+
+        if ($media->path && $media->path !== 'pending' && $media->disk !== 'pending') {
             try {
                 Storage::disk($media->disk)->delete($media->path);
-            } catch (\Exception $e) {
-                Log::warning("Failed to delete file from storage", [
+            } catch (\Throwable $e) {
+                Log::warning('Failed to delete main file from storage', [
                     'media_id' => $media->id,
                     'disk' => $media->disk,
                     'path' => $media->path,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ]);
-                // Continue with database deletion even if storage deletion fails
             }
-        } else {
-            Log::info("Skipping storage deletion for external URL", [
-                'media_id' => $media->id,
-                'path' => $media->path
-            ]);
         }
 
-        return $media->delete();
+        if ($media->thumbnail && $media->disk !== 'pending') {
+            try {
+                Storage::disk($media->disk)->delete($media->thumbnail);
+            } catch (\Throwable $e) {
+                Log::warning('Failed to delete thumbnail from storage', [
+                    'media_id' => $media->id,
+                    'disk' => $media->disk,
+                    'thumbnail' => $media->thumbnail,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
 
