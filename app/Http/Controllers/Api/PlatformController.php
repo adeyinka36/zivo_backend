@@ -67,8 +67,27 @@ class PlatformController extends Controller
         // Not cached: toggling .env should affect the app without waiting for platform_info cache TTL.
         $data['blocking_permissions'] = (bool) config('zivo.blocking_permissions', true);
         $data['show_campaigns_list'] = (bool) config('zivo.show_campaigns_list', true);
+        $data['banner_messages'] = $this->parseBannerMessages((string) config('platform.banner_message', ''));
 
         return response()->json($data);
+    }
+
+    /**
+     * Parse comma-separated banner messages from environment config.
+     *
+     * @param string $raw
+     * @return array<int, string>
+     */
+    private function parseBannerMessages(string $raw): array
+    {
+        if (trim($raw) === '') {
+            return [];
+        }
+
+        return array_values(array_filter(
+            array_map(static fn (string $part): string => trim($part), explode(',', $raw)),
+            static fn (string $part): bool => $part !== ''
+        ));
     }
 
     /**

@@ -16,4 +16,7 @@ return [
     // CONTACT_EMAIL is shown on login/register; falls back to PLATFORM_SUPPORT_EMAIL
     'support_email' => env('CONTACT_EMAIL', env('PLATFORM_SUPPORT_EMAIL', 'support@example.com')),
     'support_url' => env('PLATFORM_SUPPORT_URL', 'https://zivo.app/support'),
+
+    // Comma-separated global app banners shown at top of app (e.g. "Message A,Message B")
+    'banner_message' => env('BANNER_MESSAGE', ''),
 ];
