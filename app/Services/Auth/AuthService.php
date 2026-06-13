@@ -9,6 +9,7 @@ use App\DTOs\Auth\PasswordResetDTO;
 use App\Repositories\Contracts\AuthRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Exceptions\Auth\InvalidCredentialsException;
+use App\Exceptions\Auth\GoogleSignInRequiredException;
 use App\Exceptions\Auth\InvalidRefreshTokenException;
 use App\Exceptions\Auth\RegistrationFailedException;
 use App\Models\User;
@@ -56,12 +57,18 @@ readonly class AuthService
     public function login(LoginCredentialsDTO $dto): AuthResponseDTO
     {
         $user = $this->authRepository->authenticate($dto->email, $dto->password);
-        
-        if (!$user) {
-            throw new InvalidCredentialsException('Invalid credentials');
+
+        if ($user) {
+            return $this->authenticateUser($user);
         }
 
-        return $this->authenticateUser($user);
+        $existingUser = User::whereRaw('LOWER(email) = ?', [mb_strtolower($dto->email)])->first();
+
+        if ($existingUser && filled($existingUser->google_id)) {
+            throw new InvalidCredentialsException(GoogleSignInRequiredException::MESSAGE);
+        }
+
+        throw new InvalidCredentialsException('Invalid credentials');
     }
 
     public function authenticateUser(User $user, string $message = 'Login successful'): AuthResponseDTO
@@ -140,9 +147,14 @@ readonly class AuthService
     public function forgotPassword(PasswordResetDTO $dto): void
     {
         $user = User::whereRaw('LOWER(email) = ?', [mb_strtolower($dto->email)])->first();
-        if (!$user) {
+        if (! $user) {
             throw new \Exception('Unable to send password reset link');
         }
+
+        if (filled($user->google_id)) {
+            throw new GoogleSignInRequiredException();
+        }
+
         $status = Password::sendResetLink(['email' => $user->email]);
         if ($status !== Password::RESET_LINK_SENT) {
             throw new \Exception('Unable to send password reset link');

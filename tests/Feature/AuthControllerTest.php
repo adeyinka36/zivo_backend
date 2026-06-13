@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\Auth\GoogleSignInRequiredException;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -93,6 +94,47 @@ class AuthControllerTest extends TestCase
             ->assertJsonValidationErrors(['email'])
             ->assertJsonFragment([
                 'email' => ['An account with this email already exists. Please log in instead.'],
+            ]);
+    }
+
+    public function test_user_cannot_login_with_password_when_registered_via_google(): void
+    {
+        $email = 'john.google.login@gmail.com';
+
+        User::factory()->create([
+            'email' => $email,
+            'google_id' => 'google-oauth-id-123',
+            'password' => null,
+        ]);
+
+        $response = $this->postJson('/api/v1/login', [
+            'email' => $email,
+            'password' => 'Password123',
+        ]);
+
+        $response->assertStatus(401)
+            ->assertJson([
+                'message' => GoogleSignInRequiredException::MESSAGE,
+            ]);
+    }
+
+    public function test_forgot_password_rejects_google_registered_email(): void
+    {
+        $email = 'john.google.reset@gmail.com';
+
+        User::factory()->create([
+            'email' => $email,
+            'google_id' => 'google-oauth-id-456',
+            'password' => null,
+        ]);
+
+        $response = $this->postJson('/api/v1/password-email', [
+            'email' => $email,
+        ]);
+
+        $response->assertStatus(400)
+            ->assertJson([
+                'message' => GoogleSignInRequiredException::MESSAGE,
             ]);
     }
 

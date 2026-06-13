@@ -18,6 +18,7 @@ use App\DTOs\Auth\PasswordResetDTO;
 use App\Http\Responses\SuccessResponse;
 use App\Http\Responses\ErrorResponse;
 use App\Exceptions\Auth\InvalidCredentialsException;
+use App\Exceptions\Auth\GoogleSignInRequiredException;
 use App\Exceptions\Auth\RegistrationFailedException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -100,6 +101,8 @@ class AuthController extends Controller
             $this->authService->forgotPassword($dto);
             
             return SuccessResponse::make('Password reset link sent to your email');
+        } catch (GoogleSignInRequiredException $e) {
+            return ErrorResponse::make($e->getMessage(), $e->getCode());
         } catch (\Exception $e) {
             return ErrorResponse::make('Unable to send password reset link', 500);
         }

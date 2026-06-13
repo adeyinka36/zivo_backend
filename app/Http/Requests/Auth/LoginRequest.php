@@ -30,7 +30,6 @@ class LoginRequest extends FormRequest
     {
         return [
             'email.indisposable' => 'Please enter a valid email address.',
-            'email' => 'Please enter a valid email address.',
         ];
     }
 } 
