@@ -36,8 +36,6 @@ class UserRepository implements UserRepositoryInterface
             'avatar' => $googleUser->avatar,
         ], fn ($value) => $value !== null && $value !== '');
 
-        $verifiedAttributes = ['email_verified_at' => now()];
-
         $user = User::where('google_id', $googleUser->id)->first();
 
         if ($user) {
@@ -55,11 +53,12 @@ class UserRepository implements UserRepositoryInterface
             ]));
         }
 
-        return $this->create(array_merge($oauthData, $verifiedAttributes, [
+        return $this->create(array_merge($oauthData, [
             'name' => $googleUser->name,
             'username' => $this->generateUniqueUsername($googleUser),
             'email' => $googleUser->email,
             'google_id' => $googleUser->id,
+            'email_verified_at' => now(),
         ]));
     }
 

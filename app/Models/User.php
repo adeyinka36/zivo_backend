@@ -26,6 +26,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'name',
         'username',
         'email',
+        'email_verified_at',
         'password',
         'google_id',
         'google_token',
@@ -73,6 +74,18 @@ class User extends Authenticatable implements MustVerifyEmail
     public function sendPasswordResetNotification($token)
     {
         $this->notify(new \App\Notifications\ResetPasswordNotification($token));
+    }
+
+    public function hasVerifiedEmail(): bool
+    {
+        return filled($this->google_id) || ! is_null($this->email_verified_at);
+    }
+
+    public function emailVerifiedAtIso(): ?string
+    {
+        $verifiedAt = $this->email_verified_at ?? (filled($this->google_id) ? $this->created_at : null);
+
+        return $verifiedAt?->toISOString();
     }
 
     public function assignments(): HasMany

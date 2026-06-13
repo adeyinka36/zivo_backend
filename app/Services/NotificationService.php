@@ -268,7 +268,7 @@ class NotificationService
         return $user->push_notifications 
             && !empty($user->push_token)
             && str_starts_with($user->push_token, 'ExponentPushToken[')
-            && $user->email_verified_at !== null;
+            && $user->hasVerifiedEmail();
     }
 
     /**
