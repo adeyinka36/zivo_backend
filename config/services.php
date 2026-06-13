@@ -35,6 +35,13 @@ return [
         ],
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID', env('GOOGLE_OAUTH_WEB_CLIENT_ID')),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+        'frontend_redirect' => env('GOOGLE_FRONTEND_REDIRECT_URI', 'zivo-app://auth/callback'),
+    ],
+
     'tremendous' => [
         'api_key' => env('TREMENDOUUS_API_KEY'),
         'api_endpoint' => env('TREMENDOUUS_API_ENDPOINT'),

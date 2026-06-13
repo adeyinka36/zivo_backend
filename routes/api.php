@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\PlatformController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\RewardController;
 use App\Http\Controllers\Api\DiscoverCampaignController;
+use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\UserLocationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +42,10 @@ Route::prefix('v1')->group(function () {
     Route::get('/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail'])
         ->middleware(['signed'])
         ->name('verification.verify');
+
+    Route::post('/auth/google', [SocialAuthController::class, 'login']);
+    Route::get('/auth/redirect', [SocialAuthController::class, 'redirect']);
+    Route::get('/auth/callback', [SocialAuthController::class, 'callback']);
 
     // Creator routes (public)
     Route::post('/creators/register', [CreatorAuthController::class, 'register']);

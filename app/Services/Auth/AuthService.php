@@ -61,13 +61,18 @@ readonly class AuthService
             throw new InvalidCredentialsException('Invalid credentials');
         }
 
+        return $this->authenticateUser($user);
+    }
+
+    public function authenticateUser(User $user, string $message = 'Login successful'): AuthResponseDTO
+    {
         $token = $this->authRepository->createToken($user);
         $refreshPlain = $this->issueRefreshTokenForUser($user);
 
         return new AuthResponseDTO(
             user: $user,
             token: $token,
-            message: 'Login successful',
+            message: $message,
             refreshToken: $refreshPlain,
         );
     }
