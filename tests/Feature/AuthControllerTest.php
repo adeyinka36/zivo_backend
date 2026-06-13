@@ -72,6 +72,30 @@ class AuthControllerTest extends TestCase
             ]);
     }
 
+    public function test_user_cannot_register_with_existing_email(): void
+    {
+        $email = 'john.register.duplicate@gmail.com';
+
+        User::factory()->create([
+            'email' => $email,
+            'username' => 'existing_user',
+        ]);
+
+        $response = $this->postJson('/api/v1/register', [
+            'name' => 'Existing User',
+            'username' => 'existing_user',
+            'email' => $email,
+            'password' => 'Password123',
+            'password_confirmation' => 'Password123',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['email'])
+            ->assertJsonFragment([
+                'email' => ['An account with this email already exists. Please log in instead.'],
+            ]);
+    }
+
     public function test_user_can_logout(): void
     {
         $user = User::factory()->create();

@@ -24,7 +24,21 @@ class RegisterRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'max:255', 'unique:users,username'],
+            'username' => [
+                'required',
+                'string',
+                'max:255',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    $email = mb_strtolower((string) $this->input('email', ''));
+                    if ($email !== '' && User::whereRaw('LOWER(email) = ?', [$email])->exists()) {
+                        return;
+                    }
+
+                    if (User::where('username', $value)->exists()) {
+                        $fail('This username is already taken.');
+                    }
+                },
+            ],
             'email' => [
                 'required',
                 'string',
@@ -32,7 +46,7 @@ class RegisterRequest extends FormRequest
                 'max:255',
                 function (string $attribute, mixed $value, \Closure $fail) {
                     if (User::whereRaw('LOWER(email) = ?', [mb_strtolower($value)])->exists()) {
-                        $fail('This email is already registered.');
+                        $fail('An account with this email already exists. Please log in instead.');
                     }
                 },
                 'indisposable',
@@ -60,10 +74,9 @@ class RegisterRequest extends FormRequest
             
             'email.required' => 'Please enter your email address.',
             'email.email' => 'Please enter a valid email address.',
-            'email.unique' => 'This email is already registered.',
+            'email.unique' => 'An account with this email already exists. Please log in instead.',
             'email.max' => 'Email cannot exceed 255 characters.',
             'email.indisposable' => 'Please enter a valid email address.',
-            'email' => 'Please enter a valid email address.',
             
             'password.required' => 'Please enter a password.',
             'password.confirmed' => 'Password confirmation does not match.',
