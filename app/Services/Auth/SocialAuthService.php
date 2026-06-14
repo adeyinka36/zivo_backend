@@ -2,6 +2,7 @@
 
 namespace App\Services\Auth;
 
+use App\Actions\Auth\AuthenticateWithAppleIdentityTokenAction;
 use App\Actions\Auth\AuthenticateWithGoogleIdTokenAction;
 use App\Actions\Auth\HandleGoogleCallbackAction;
 use App\Actions\Auth\RedirectToGoogleAction;
@@ -14,6 +15,7 @@ readonly class SocialAuthService
         private RedirectToGoogleAction $redirectToGoogleAction,
         private HandleGoogleCallbackAction $handleGoogleCallbackAction,
         private AuthenticateWithGoogleIdTokenAction $authenticateWithGoogleIdTokenAction,
+        private AuthenticateWithAppleIdentityTokenAction $authenticateWithAppleIdentityTokenAction,
     ) {}
 
     public function redirectToGoogle(): RedirectResponse
@@ -29,5 +31,17 @@ readonly class SocialAuthService
     public function loginWithIdToken(string $idToken): AuthResponseDTO
     {
         return $this->authenticateWithGoogleIdTokenAction->execute($idToken);
+    }
+
+    public function loginWithAppleIdentityToken(
+        string $identityToken,
+        ?string $name = null,
+        ?string $email = null,
+    ): AuthResponseDTO {
+        return $this->authenticateWithAppleIdentityTokenAction->execute(
+            $identityToken,
+            $name,
+            $email,
+        );
     }
 }

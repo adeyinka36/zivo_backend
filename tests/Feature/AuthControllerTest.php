@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\Auth\AppleSignInRequiredException;
 use App\Exceptions\Auth\GoogleSignInRequiredException;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -135,6 +136,47 @@ class AuthControllerTest extends TestCase
         $response->assertStatus(400)
             ->assertJson([
                 'message' => GoogleSignInRequiredException::MESSAGE,
+            ]);
+    }
+
+    public function test_forgot_password_rejects_apple_registered_email(): void
+    {
+        $email = 'john.apple.reset@gmail.com';
+
+        User::factory()->create([
+            'email' => $email,
+            'apple_id' => 'apple-oauth-id-789',
+            'password' => null,
+        ]);
+
+        $response = $this->postJson('/api/v1/password-email', [
+            'email' => $email,
+        ]);
+
+        $response->assertStatus(400)
+            ->assertJson([
+                'message' => AppleSignInRequiredException::MESSAGE,
+            ]);
+    }
+
+    public function test_user_cannot_login_with_password_when_registered_via_apple(): void
+    {
+        $email = 'john.apple.login@gmail.com';
+
+        User::factory()->create([
+            'email' => $email,
+            'apple_id' => 'apple-oauth-id-321',
+            'password' => null,
+        ]);
+
+        $response = $this->postJson('/api/v1/login', [
+            'email' => $email,
+            'password' => 'Password123',
+        ]);
+
+        $response->assertStatus(401)
+            ->assertJson([
+                'message' => AppleSignInRequiredException::MESSAGE,
             ]);
     }
 

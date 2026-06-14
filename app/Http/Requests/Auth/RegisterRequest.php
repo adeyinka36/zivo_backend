@@ -45,8 +45,11 @@ class RegisterRequest extends FormRequest
                 'email:rfc,dns',
                 'max:255',
                 function (string $attribute, mixed $value, \Closure $fail) {
-                    if (User::whereRaw('LOWER(email) = ?', [mb_strtolower($value)])->exists()) {
-                        $fail('An account with this email already exists. Please log in instead.');
+                    $existingUser = User::whereRaw('LOWER(email) = ?', [mb_strtolower($value)])->first();
+
+                    if ($existingUser) {
+                        $fail($existingUser->socialSignInRequiredMessage()
+                            ?? 'An account with this email already exists. Please log in instead.');
                     }
                 },
                 'indisposable',

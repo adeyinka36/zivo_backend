@@ -44,6 +44,7 @@ Route::prefix('v1')->group(function () {
         ->name('verification.verify');
 
     Route::post('/auth/google', [SocialAuthController::class, 'login']);
+    Route::post('/auth/apple', [SocialAuthController::class, 'loginWithApple']);
     Route::get('/auth/redirect', [SocialAuthController::class, 'redirect']);
     Route::get('/auth/callback', [SocialAuthController::class, 'callback']);
 

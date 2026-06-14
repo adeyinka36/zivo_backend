@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\Auth\SocialAuthFailedException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\AppleLoginRequest;
 use App\Http\Requests\Auth\GoogleLoginRequest;
 use App\Http\Responses\ErrorResponse;
 use App\Http\Responses\SuccessResponse;
@@ -23,6 +24,26 @@ class SocialAuthController extends Controller
         try {
             $response = $this->socialAuthService->loginWithIdToken(
                 $request->validated('id_token'),
+            );
+
+            return SuccessResponse::make(
+                $response->message,
+                $response->toArray()['data'],
+            );
+        } catch (SocialAuthFailedException $e) {
+            return ErrorResponse::make($e->getMessage(), $e->getCode());
+        }
+    }
+
+    public function loginWithApple(AppleLoginRequest $request): JsonResponse
+    {
+        try {
+            $validated = $request->validated();
+
+            $response = $this->socialAuthService->loginWithAppleIdentityToken(
+                $validated['identity_token'],
+                $validated['name'] ?? null,
+                $validated['email'] ?? null,
             );
 
             return SuccessResponse::make(

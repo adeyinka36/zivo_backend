@@ -2,9 +2,11 @@
 
 namespace App\Repositories;
 
+use App\DTOs\Auth\AppleUserDTO;
 use App\DTOs\Auth\GoogleUserDTO;
 use App\Models\User;
 use App\Repositories\Contracts\UserRepositoryInterface;
+use App\Exceptions\Auth\SocialAuthFailedException;
 use Illuminate\Support\Facades\Hash;
 
 class UserRepository implements UserRepositoryInterface
@@ -55,11 +57,47 @@ class UserRepository implements UserRepositoryInterface
 
         return $this->create(array_merge($oauthData, [
             'name' => $googleUser->name,
-            'username' => $this->generateUniqueUsername($googleUser),
+            'username' => $this->generateUniqueUsername($googleUser->name, $googleUser->email),
             'email' => $googleUser->email,
             'google_id' => $googleUser->id,
             'email_verified_at' => now(),
         ]));
+    }
+
+    public function findOrCreateFromApple(AppleUserDTO $appleUser): User
+    {
+        $user = User::where('apple_id', $appleUser->id)->first();
+
+        if ($user) {
+            return $this->update($user, [
+                'email_verified_at' => $user->email_verified_at ?? now(),
+            ]);
+        }
+
+        if ($appleUser->email) {
+            $user = User::whereRaw('LOWER(email) = ?', [$appleUser->email])->first();
+
+            if ($user) {
+                return $this->update($user, [
+                    'apple_id' => $appleUser->id,
+                    'email_verified_at' => $user->email_verified_at ?? now(),
+                ]);
+            }
+        }
+
+        if (! $appleUser->email) {
+            throw new SocialAuthFailedException(
+                'Apple must share an email on first sign-in. Remove ZI-VO from Settings > Apple ID > Sign in with Apple, then try again.',
+            );
+        }
+
+        return $this->create([
+            'name' => $appleUser->name,
+            'username' => $this->generateUniqueUsername($appleUser->name, $appleUser->email),
+            'email' => $appleUser->email,
+            'apple_id' => $appleUser->id,
+            'email_verified_at' => now(),
+        ]);
     }
 
     public function update(User $user, array $data): User
@@ -73,10 +111,10 @@ class UserRepository implements UserRepositoryInterface
         return $user->delete();
     }
 
-    private function generateUniqueUsername(GoogleUserDTO $googleUser): string
+    private function generateUniqueUsername(string $name, string $email): string
     {
-        $nameSlug = strtolower(preg_replace('/[^a-z0-9]/', '', $googleUser->name) ?? '');
-        $emailPrefix = explode('@', $googleUser->email)[0];
+        $nameSlug = strtolower(preg_replace('/[^a-z0-9]/', '', $name) ?? '');
+        $emailPrefix = explode('@', $email)[0];
         $base = ($nameSlug !== '' ? $nameSlug : 'user').'_'.$emailPrefix;
 
         $username = $base;

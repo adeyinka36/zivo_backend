@@ -42,6 +42,10 @@ return [
         'frontend_redirect' => env('GOOGLE_FRONTEND_REDIRECT_URI', 'zivo-app://auth/callback'),
     ],
 
+    'apple' => [
+        'client_id' => env('APPLE_CLIENT_ID', 'com.adegiwa.zivo.app'),
+    ],
+
     'tremendous' => [
         'api_key' => env('TREMENDOUUS_API_KEY'),
         'api_endpoint' => env('TREMENDOUUS_API_ENDPOINT'),

@@ -31,6 +31,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'google_id',
         'google_token',
         'google_refresh_token',
+        'apple_id',
         'avatar',
         'push_token',
         'push_notifications',
@@ -78,14 +79,30 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function hasVerifiedEmail(): bool
     {
-        return filled($this->google_id) || ! is_null($this->email_verified_at);
+        return filled($this->google_id)
+            || filled($this->apple_id)
+            || ! is_null($this->email_verified_at);
     }
 
     public function emailVerifiedAtIso(): ?string
     {
-        $verifiedAt = $this->email_verified_at ?? (filled($this->google_id) ? $this->created_at : null);
+        $verifiedAt = $this->email_verified_at
+            ?? ((filled($this->google_id) || filled($this->apple_id)) ? $this->created_at : null);
 
         return $verifiedAt?->toISOString();
+    }
+
+    public function socialSignInRequiredMessage(): ?string
+    {
+        if (filled($this->apple_id)) {
+            return \App\Exceptions\Auth\AppleSignInRequiredException::MESSAGE;
+        }
+
+        if (filled($this->google_id)) {
+            return \App\Exceptions\Auth\GoogleSignInRequiredException::MESSAGE;
+        }
+
+        return null;
     }
 
     public function assignments(): HasMany

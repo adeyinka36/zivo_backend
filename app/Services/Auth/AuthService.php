@@ -9,6 +9,7 @@ use App\DTOs\Auth\PasswordResetDTO;
 use App\Repositories\Contracts\AuthRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Exceptions\Auth\InvalidCredentialsException;
+use App\Exceptions\Auth\AppleSignInRequiredException;
 use App\Exceptions\Auth\GoogleSignInRequiredException;
 use App\Exceptions\Auth\InvalidRefreshTokenException;
 use App\Exceptions\Auth\RegistrationFailedException;
@@ -64,8 +65,8 @@ readonly class AuthService
 
         $existingUser = User::whereRaw('LOWER(email) = ?', [mb_strtolower($dto->email)])->first();
 
-        if ($existingUser && filled($existingUser->google_id)) {
-            throw new InvalidCredentialsException(GoogleSignInRequiredException::MESSAGE);
+        if ($existingUser && ($message = $existingUser->socialSignInRequiredMessage())) {
+            throw new InvalidCredentialsException($message);
         }
 
         throw new InvalidCredentialsException('Invalid credentials');
@@ -151,7 +152,11 @@ readonly class AuthService
             throw new \Exception('Unable to send password reset link');
         }
 
-        if (filled($user->google_id)) {
+        if ($message = $user->socialSignInRequiredMessage()) {
+            if (filled($user->apple_id)) {
+                throw new AppleSignInRequiredException();
+            }
+
             throw new GoogleSignInRequiredException();
         }
 
