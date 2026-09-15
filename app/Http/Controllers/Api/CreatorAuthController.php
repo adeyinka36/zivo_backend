@@ -77,6 +77,7 @@ class CreatorAuthController extends Controller
                 'phone' => $validated['phone'] ?? null,
                 'is_limited_company' => $validated['is_limited_company'],
                 'crn' => $validated['crn'] ?? null,
+                'email_verified_at' => now(),
             ]);
 
             $disk = app()->environment('testing') ? 'public' : 's3';
@@ -93,17 +94,19 @@ class CreatorAuthController extends Controller
                 'proof_of_address_path' => $path,
             ]);
 
-            // Don't send email verification - manual review process
+            $creator->refresh();
+
             $token = $creator->createToken('creator-auth-token')->plainTextToken;
 
             return SuccessResponse::make(
-                'Registration submitted successfully. Your application is under review.',
+                'Registration successful. Your account is ready to use.',
                 [
                     'creator' => [
                         'id' => $creator->id,
                         'name' => $creator->name,
                         'business_name' => $creator->business_name,
                         'email' => $creator->email,
+                        'email_verified_at' => $creator->email_verified_at,
                     ],
                     'token' => $token,
                 ],
@@ -279,13 +282,18 @@ class CreatorAuthController extends Controller
 
       $creator->update($updateData);
 
+      if (! $creator->hasVerifiedEmail()) {
+        $creator->forceFill(['email_verified_at' => now()])->save();
+      }
+
       return SuccessResponse::make(
-        'Verification documents uploaded successfully. We will review them within 24-48 hours.',
+        'Business details saved successfully. Your account is ready to use.',
         [
           'creator' => [
             'id' => $creator->id,
             'business_name' => $creator->business_name,
             'proof_of_address_type' => $creator->proof_of_address_type,
+            'email_verified_at' => $creator->email_verified_at,
           ],
         ]
       );
