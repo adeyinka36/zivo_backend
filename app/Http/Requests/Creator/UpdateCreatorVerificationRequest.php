@@ -16,7 +16,7 @@ class UpdateCreatorVerificationRequest extends FormRequest
         return [
             'is_limited_company' => ['required', 'boolean'],
             'crn' => ['nullable', 'string', 'max:8', 'regex:/^\d{8}$/'],
-            'proof_of_address_type' => ['required', 'string', 'in:utility_bill,bank_statement,lease_agreement,hmrc_letter,business_rates,shopfront_selfie'],
+            'proof_of_address_type' => ['required', 'string', 'in:utility_bill,bank_statement,lease_agreement,hmrc_letter,business_rates,shopfront_selfie,business_photo'],
             'proof_of_address' => ['required', 'file', 'mimes:jpeg,png,pdf,heic', 'max:5120'], // Max 5MB
         ];
     }

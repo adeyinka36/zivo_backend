@@ -60,13 +60,17 @@ class CreatorAuthController extends Controller
     }
 
     /**
-     * Register a new creator with verification documents in a single request.
+     * Register a new creator with address, postcode, and a business photo.
      */
     public function registerWithVerification(RegisterCreatorWithVerificationRequest $request): JsonResponse
     {
         try {
             $validated = $request->validated();
-            $file = $request->file('proof_of_address');
+            $file = $request->file('business_photo');
+
+            if ($file === null) {
+                return ErrorResponse::make('Please add a photo of your business.', 422);
+            }
 
             $creator = Creator::create([
                 'name' => $validated['business_name'],
@@ -75,9 +79,9 @@ class CreatorAuthController extends Controller
                 'password' => Hash::make($validated['password']),
                 'secret' => Str::random(60),
                 'address' => $validated['address'],
+                'postcode' => $validated['postcode'],
                 'phone' => $validated['phone'] ?? null,
-                'is_limited_company' => $validated['is_limited_company'],
-                'crn' => $validated['crn'] ?? null,
+                'is_limited_company' => false,
                 'email_verified_at' => now(),
             ]);
 
@@ -91,7 +95,7 @@ class CreatorAuthController extends Controller
             );
 
             $creator->update([
-                'proof_of_address_type' => $validated['proof_of_address_type'],
+                'proof_of_address_type' => 'business_photo',
                 'proof_of_address_path' => $path,
             ]);
 
@@ -202,6 +206,7 @@ class CreatorAuthController extends Controller
                     'email_verified_at' => $creator->email_verified_at,
                     'phone' => $creator->phone,
                     'address' => $creator->address,
+                    'postcode' => $creator->postcode,
                     'crn' => $creator->crn,
                     'is_admin' => $creator->is_admin,
                 ]

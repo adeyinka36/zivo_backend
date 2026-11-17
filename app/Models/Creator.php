@@ -27,6 +27,7 @@ class Creator extends Authenticatable implements MustVerifyEmail
         'password',
         'phone',
         'address',
+        'postcode',
         'secret',
         'crn',
         'is_limited_company',
