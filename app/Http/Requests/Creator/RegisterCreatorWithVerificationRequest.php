@@ -40,7 +40,7 @@ class RegisterCreatorWithVerificationRequest extends FormRequest
             'address' => ['required', 'string', 'max:500'],
             'postcode' => ['required', 'string', 'max:12', 'regex:/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i'],
             'phone' => ['nullable', 'string', 'max:20'],
-            'business_photo' => ['required', 'file', 'mimes:jpeg,jpg,png,heic,heif', 'max:5120'],
+            'business_photo' => ['nullable', 'file', 'mimes:jpeg,jpg,png,heic,heif', 'max:5120'],
         ];
     }
 
@@ -81,7 +81,6 @@ class RegisterCreatorWithVerificationRequest extends FormRequest
             'postcode.required' => 'Please enter your postcode.',
             'postcode.regex' => 'Please enter a valid UK postcode.',
 
-            'business_photo.required' => 'Please add a photo of your business.',
             'business_photo.mimes' => 'Business photo must be a JPEG, PNG, or HEIC.',
             'business_photo.max' => 'Business photo must not exceed 5MB.',
         ];

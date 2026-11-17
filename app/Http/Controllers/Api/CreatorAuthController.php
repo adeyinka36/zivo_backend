@@ -60,17 +60,13 @@ class CreatorAuthController extends Controller
     }
 
     /**
-     * Register a new creator with address, postcode, and a business photo.
+     * Register a new creator with address, postcode, and an optional business photo.
      */
     public function registerWithVerification(RegisterCreatorWithVerificationRequest $request): JsonResponse
     {
         try {
             $validated = $request->validated();
             $file = $request->file('business_photo');
-
-            if ($file === null) {
-                return ErrorResponse::make('Please add a photo of your business.', 422);
-            }
 
             $creator = Creator::create([
                 'name' => $validated['business_name'],
@@ -85,21 +81,23 @@ class CreatorAuthController extends Controller
                 'email_verified_at' => now(),
             ]);
 
-            $disk = app()->environment('testing') ? 'public' : 's3';
-            $path = 'creators_documents/' . $creator->id . '/' . $file->hashName();
+            if ($file !== null) {
+                $disk = app()->environment('testing') ? 'public' : 's3';
+                $path = 'creators_documents/' . $creator->id . '/' . $file->hashName();
 
-            $file->storeAs(
-                'creators_documents/' . $creator->id,
-                $file->hashName(),
-                ['disk' => $disk]
-            );
+                $file->storeAs(
+                    'creators_documents/' . $creator->id,
+                    $file->hashName(),
+                    ['disk' => $disk]
+                );
 
-            $creator->update([
-                'proof_of_address_type' => 'business_photo',
-                'proof_of_address_path' => $path,
-            ]);
+                $creator->update([
+                    'proof_of_address_type' => 'business_photo',
+                    'proof_of_address_path' => $path,
+                ]);
 
-            $creator->refresh();
+                $creator->refresh();
+            }
 
             $token = $creator->createToken('creator-auth-token')->plainTextToken;
 
