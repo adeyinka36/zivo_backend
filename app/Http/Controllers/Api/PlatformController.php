@@ -69,6 +69,10 @@ class PlatformController extends Controller
         $data['show_campaigns_list'] = (bool) config('zivo.show_campaigns_list', true);
         $data['banner_messages'] = $this->parseBannerMessages((string) config('platform.banner_message', ''));
 
+        $costPerRound = (float) config('services.media.cost_per_round', 0.25);
+        $data['media']['cost_per_round'] = $costPerRound;
+        $data['payments']['charging_enabled'] = $costPerRound > 0;
+
         return response()->json($data);
     }
 

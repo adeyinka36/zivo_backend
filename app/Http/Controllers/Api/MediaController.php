@@ -125,6 +125,7 @@ class MediaController extends Controller
                     'client_secret' => $paymentResult['client_secret'],
                     'payment_id' => $paymentResult['payment_id'],
                     'existing' => $paymentResult['existing'] ?? false,
+                    'requires_payment' => $paymentResult['requires_payment'] ?? true,
                 ]
             ]);
         });

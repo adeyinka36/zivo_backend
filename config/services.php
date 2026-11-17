@@ -55,7 +55,7 @@ return [
         // How many views are required to complete a single round.
         'target_views' => (int) env('MEDIA_TARGET_VIEWS', 10),
 
-        // Monetary cost per round in your main currency (e.g. USD).
+        // Monetary cost per round in your main currency (e.g. USD). Set to 0 to disable charging.
         'cost_per_round' => (float) env('MEDIA_COST_PER_ROUND', 0.25),
 
         // Minimum and maximum rounds allowed when creators configure a campaign.

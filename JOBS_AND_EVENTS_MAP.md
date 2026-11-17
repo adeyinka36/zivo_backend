@@ -1,5 +1,7 @@
 # Jobs and Events Map
 
+The current map of user flows, jobs, and events is in [`docs/flows`](../docs/flows/README.md). The schedule there follows `routes/console.php`. Some intervals in this file (for example cleanup every 6 hours) are older than that schedule.
+
 This document maps out all jobs, events, and their triggers in the Zivo backend application.
 
 ## Table of Contents

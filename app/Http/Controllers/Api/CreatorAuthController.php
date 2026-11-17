@@ -10,6 +10,7 @@ use App\Http\Requests\Creator\UpdateCreatorVerificationRequest;
 use App\Http\Responses\SuccessResponse;
 use App\Http\Responses\ErrorResponse;
 use App\Models\Creator;
+use App\Services\Creator\CreatorAccountDeletionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -305,4 +306,28 @@ class CreatorAuthController extends Controller
       return ErrorResponse::make('Failed to upload verification documents. Please try again.', 500);
     }
   }
+
+    public function deleteAccount(
+        Request $request,
+        CreatorAccountDeletionService $deletionService
+    ): JsonResponse {
+        $creator = $request->user();
+
+        if (! $creator instanceof Creator) {
+            return ErrorResponse::make('Unauthorized. Creator authentication required.', 401);
+        }
+
+        try {
+            $deletionService->delete($creator);
+
+            return SuccessResponse::make('Account deleted successfully');
+        } catch (\Throwable $e) {
+            Log::error('Failed to delete creator account', [
+                'creator_id' => $creator->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ErrorResponse::make('Failed to delete account. Please try again.', 500);
+        }
+    }
 }

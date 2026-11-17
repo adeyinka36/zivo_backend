@@ -20,14 +20,31 @@ class PaymentService
     ) {}
 
     /**
+     * Charging is off when MEDIA_COST_PER_ROUND is 0 (or below).
+     */
+    public function isChargingEnabled(): bool
+    {
+        return (float) config('services.media.cost_per_round', 0.25) > 0;
+    }
+
+    /**
      * Calculate expected payment amount from media record (server-side).
-     * Uses config services.media.cost_per_round (in major currency, e.g. dollars) and enforces Stripe minimum.
+     * Uses config services.media.cost_per_round (in major currency, e.g. dollars) and enforces Stripe minimum
+     * only when charging is enabled.
      *
      * @param Media $media
      * @return array{reward_amount_cents: int, platform_fee_cents: int, total_amount_cents: int}
      */
     public function calculateExpectedPaymentAmount(Media $media): array
     {
+        if (! $this->isChargingEnabled()) {
+            return [
+                'reward_amount_cents' => 0,
+                'platform_fee_cents' => 0,
+                'total_amount_cents' => 0,
+            ];
+        }
+
         $costPerRound = (float) config('services.media.cost_per_round', 0.25);
         $rounds = (int) $media->rounds;
         $totalAmountCents = (int) round($costPerRound * 100 * $rounds);
@@ -50,6 +67,10 @@ class PaymentService
     public function createPaymentIntent(Media $media, Creator $creator): array
     {
         return DB::transaction(function () use ($media, $creator) {
+            if (! $this->isChargingEnabled()) {
+                return $this->createComplimentaryPayment($media, $creator);
+            }
+
             $existingPayment = $this->paymentRepository->findByMediaId($media->id)
                 ->where('status', Payment::STATUS_PENDING)
                 ->first();
@@ -66,6 +87,7 @@ class PaymentService
                         'client_secret' => $this->getClientSecret($existingPayment->stripe_payment_intent_id),
                         'payment_id' => $existingPayment->id,
                         'existing' => true,
+                        'requires_payment' => true,
                     ];
                 } catch (ApiErrorException $e) {
                     Log::warning('Could not retrieve existing PaymentIntent, creating new one', [
@@ -126,6 +148,7 @@ class PaymentService
                     'client_secret' => $paymentIntent->client_secret,
                     'payment_id' => $payment->id,
                     'existing' => false,
+                    'requires_payment' => true,
                 ];
 
             } catch (ApiErrorException $e) {
@@ -313,6 +336,47 @@ class PaymentService
             ]);
             throw new \Exception('Refund failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * @return array{client_secret: null, payment_id: string, existing: bool, requires_payment: false}
+     */
+    private function createComplimentaryPayment(Media $media, Creator $creator): array
+    {
+        $existingSucceeded = $this->paymentRepository->findByMediaId($media->id)
+            ->where('status', Payment::STATUS_SUCCEEDED)
+            ->first();
+
+        if ($existingSucceeded) {
+            return [
+                'client_secret' => null,
+                'payment_id' => $existingSucceeded->id,
+                'existing' => true,
+                'requires_payment' => false,
+            ];
+        }
+
+        $payment = $this->paymentRepository->create([
+            'creator_id' => $creator->id,
+            'media_id' => $media->id,
+            'transaction_reference' => $this->generateTransactionReference($media->id, $creator->id),
+            'stripe_payment_intent_id' => null,
+            'status' => Payment::STATUS_SUCCEEDED,
+            'amount' => 0,
+            'currency' => config('stripe.currency'),
+            'payment_method' => 'complimentary',
+            'paid_at' => now(),
+            'gateway_response' => [
+                'complimentary' => true,
+            ],
+        ]);
+
+        return [
+            'client_secret' => null,
+            'payment_id' => $payment->id,
+            'existing' => false,
+            'requires_payment' => false,
+        ];
     }
 
     /**

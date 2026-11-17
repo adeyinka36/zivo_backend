@@ -106,6 +106,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/companies-house/{crn}', [CompaniesHouseController::class, 'getCompanyDetails'])->middleware('ensure.creator');
 
         Route::post('/creators/logout', [CreatorAuthController::class, 'logout'])->middleware('ensure.creator');
+        Route::delete('/creators', [CreatorAuthController::class, 'deleteAccount'])->middleware('ensure.creator');
         Route::get('/creators/me', [CreatorAuthController::class, 'me'])->middleware('ensure.creator');
         Route::post('/creators/update-verification', [CreatorAuthController::class, 'updateVerification'])->middleware('ensure.creator');
 
